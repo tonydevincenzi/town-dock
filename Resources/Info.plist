@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleDisplayName</key>
+    <string>Town Dock</string>
+    <key>CFBundleExecutable</key>
+    <string>TownDock</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.tony.towndock</string>
+	<key>CFBundleIconFile</key>
+	<string>TownDock</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Town Dock</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+    <key>LSUIElement</key>
+    <true/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>Town Dock uses Terminal to open a shell at a selected Town worktree.</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSHumanReadableCopyright</key>
+    <string>Local utility for Town development</string>
+    <key>SUAutomaticallyUpdate</key>
+    <true/>
+    <key>SUScheduledCheckInterval</key>
+    <integer>86400</integer>
+    <key>SUPublicEDKey</key>
+    <string>A704SFoAXZd2U7ysW8TUWbhjzvvWhWwEe428vMG6MbQ=</string>
+</dict>
+</plist>

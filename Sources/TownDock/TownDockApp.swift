@@ -1,0 +1,150 @@
+import AppKit
+import Sparkle
+import SwiftUI
+import TownDockCore
+
+@main
+struct TownDockApp: App {
+    @NSApplicationDelegateAdaptor(TownDockAppDelegate.self) private var appDelegate
+
+    var body: some Scene {
+        Settings {
+            EmptyView()
+        }
+    }
+}
+
+@MainActor
+final class TownDockAppDelegate: NSObject, NSApplicationDelegate {
+    private let store = TownStore.shared
+    private let statusItem = NSStatusBar.system.statusItem(
+        withLength: NSStatusItem.variableLength
+    )
+    private let popover = NSPopover()
+    private var dashboardWindow: NSWindow?
+    private lazy var updaterController = SPUStandardUpdaterController(
+        startingUpdater: false,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
+
+    private var updatesConfigured: Bool {
+        guard
+            let feedURL = Bundle.main.object(forInfoDictionaryKey: "SUFeedURL") as? String,
+            let publicKey = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") as? String
+        else { return false }
+        return feedURL.hasPrefix("https://") && !publicKey.isEmpty
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApp.setActivationPolicy(.accessory)
+        configureStatusItem()
+        configurePopover()
+        updateStatusItem()
+        store.startPolling()
+        if updatesConfigured {
+            updaterController.startUpdater()
+        }
+        showDashboard()
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(
+        _ sender: NSApplication
+    ) -> Bool {
+        false
+    }
+
+    private func configureStatusItem() {
+        guard let button = statusItem.button else { return }
+        button.target = self
+        button.action = #selector(togglePopover(_:))
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        button.toolTip = "Town Dock"
+        button.title = " Town"
+        button.imageScaling = .scaleProportionallyDown
+        button.setAccessibilityLabel("Town Dock")
+        statusItem.isVisible = true
+    }
+
+    private func configurePopover() {
+        popover.behavior = .transient
+        // NSPopover's default zoom/slide transition stutters when hosting a
+        // live SwiftUI hierarchy. An immediate toggle feels materially more
+        // responsive and avoids exposing intermediate layout frames.
+        popover.animates = false
+        popover.contentSize = NSSize(width: 370, height: 520)
+        popover.contentViewController = NSHostingController(
+            rootView: MenuBarView(
+                showDashboardAction: { [weak self] in
+                    self?.popover.performClose(nil)
+                    self?.showDashboard()
+                },
+                checkForUpdatesAction: { [weak self] in
+                    self?.popover.performClose(nil)
+                    self?.checkForUpdates()
+                },
+                updatesEnabled: updatesConfigured
+            )
+            .environmentObject(store)
+        )
+    }
+
+    private func updateStatusItem() {
+        guard let button = statusItem.button else { return }
+        button.image = TownDockIcon.menuBarImage()
+    }
+
+    private func checkForUpdates() {
+        guard updatesConfigured else {
+            let alert = NSAlert()
+            alert.alertStyle = .informational
+            alert.messageText = "Updates aren’t configured in this build"
+            alert.informativeText = "This is a local development build of Town Dock. Automatic updates become available in Developer ID-signed releases published with an update feed."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+            return
+        }
+        updaterController.checkForUpdates(nil)
+    }
+
+    @objc private func togglePopover(_ sender: NSStatusBarButton) {
+        if popover.isShown {
+            popover.performClose(sender)
+        } else {
+            popover.show(
+                relativeTo: sender.bounds,
+                of: sender,
+                preferredEdge: .minY
+            )
+            popover.contentViewController?.view.window?.makeKey()
+        }
+    }
+
+    private func showDashboard() {
+        if dashboardWindow == nil {
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 1_120, height: 760),
+                styleMask: [.titled, .closable, .miniaturizable, .resizable],
+                backing: .buffered,
+                defer: false
+            )
+            window.title = "Town Dock"
+            window.minSize = NSSize(width: 920, height: 620)
+            window.isReleasedWhenClosed = false
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.titlebarAppearsTransparent = true
+            window.titleVisibility = .hidden
+            window.styleMask.insert(.fullSizeContentView)
+            window.toolbarStyle = .unifiedCompact
+            window.center()
+            window.contentViewController = NSHostingController(
+                rootView: DashboardView()
+                    .environmentObject(store)
+                    .frame(minWidth: 920, minHeight: 620)
+            )
+            dashboardWindow = window
+        }
+        dashboardWindow?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}

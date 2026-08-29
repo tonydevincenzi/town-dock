@@ -1,0 +1,115 @@
+name: Release Town Dock
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate version tag
+        shell: bash
+        run: |
+          TOWN_DOCK_RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          TOWN_DOCK_FILE_VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [[ "$TOWN_DOCK_RELEASE_VERSION" != "$TOWN_DOCK_FILE_VERSION" ]]; then
+            echo "Tag version $TOWN_DOCK_RELEASE_VERSION does not match VERSION ($TOWN_DOCK_FILE_VERSION)." >&2
+            exit 1
+          fi
+
+      - name: Import Developer ID certificate
+        env:
+          TOWN_DOCK_CERTIFICATE_P12: ${{ secrets.DEVELOPER_ID_CERTIFICATE_P12 }}
+          TOWN_DOCK_CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+          TOWN_DOCK_KEYCHAIN_PASSWORD: ${{ secrets.BUILD_KEYCHAIN_PASSWORD }}
+        shell: bash
+        run: |
+          TOWN_DOCK_KEYCHAIN="$RUNNER_TEMP/town-dock-signing.keychain-db"
+          printf '%s' "$TOWN_DOCK_CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/developer-id.p12"
+          security create-keychain -p "$TOWN_DOCK_KEYCHAIN_PASSWORD" "$TOWN_DOCK_KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$TOWN_DOCK_KEYCHAIN"
+          security unlock-keychain -p "$TOWN_DOCK_KEYCHAIN_PASSWORD" "$TOWN_DOCK_KEYCHAIN"
+          security import "$RUNNER_TEMP/developer-id.p12" -k "$TOWN_DOCK_KEYCHAIN" -P "$TOWN_DOCK_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security list-keychains -d user -s "$TOWN_DOCK_KEYCHAIN"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$TOWN_DOCK_KEYCHAIN_PASSWORD" "$TOWN_DOCK_KEYCHAIN"
+
+      - name: Resolve dependencies
+        run: swift package resolve
+
+      - name: Build signed application
+        env:
+          TOWN_DOCK_FEED_URL: https://github.com/${{ github.repository }}/releases/latest/download/appcast.xml
+          TOWN_DOCK_BUILD_NUMBER: ${{ github.run_number }}
+        shell: bash
+        run: |
+          TOWN_DOCK_RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          TOWN_DOCK_DEVELOPER_ID="$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)"
+          if [[ -z "$TOWN_DOCK_DEVELOPER_ID" ]]; then
+            echo "Developer ID Application identity was not imported." >&2
+            exit 1
+          fi
+          TOWN_DOCK_VERSION="$TOWN_DOCK_RELEASE_VERSION" \
+          TOWN_DOCK_SIGN_IDENTITY="$TOWN_DOCK_DEVELOPER_ID" \
+          TOWN_DOCK_UNIVERSAL=1 \
+            ./scripts/package-app.sh release
+
+      - name: Notarize and staple
+        env:
+          TOWN_DOCK_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_PRIVATE_KEY }}
+          TOWN_DOCK_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          TOWN_DOCK_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        shell: bash
+        run: |
+          TOWN_DOCK_RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          TOWN_DOCK_ARCHIVE="dist/updates/Town-Dock-$TOWN_DOCK_RELEASE_VERSION.zip"
+          mkdir -p dist/updates
+          ditto -c -k --sequesterRsrc --keepParent "dist/Town Dock.app" "$TOWN_DOCK_ARCHIVE"
+          printf '%s' "$TOWN_DOCK_NOTARY_KEY" > "$RUNNER_TEMP/AuthKey_$TOWN_DOCK_NOTARY_KEY_ID.p8"
+          xcrun notarytool submit "$TOWN_DOCK_ARCHIVE" \
+            --key "$RUNNER_TEMP/AuthKey_$TOWN_DOCK_NOTARY_KEY_ID.p8" \
+            --key-id "$TOWN_DOCK_NOTARY_KEY_ID" \
+            --issuer "$TOWN_DOCK_NOTARY_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "dist/Town Dock.app"
+          xcrun stapler validate "dist/Town Dock.app"
+          ditto -c -k --sequesterRsrc --keepParent "dist/Town Dock.app" "$TOWN_DOCK_ARCHIVE"
+
+      - name: Generate signed update feed
+        env:
+          TOWN_DOCK_SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        shell: bash
+        run: |
+          TOWN_DOCK_SPARKLE_KEY_FILE="$RUNNER_TEMP/town-dock-sparkle-key"
+          printf '%s' "$TOWN_DOCK_SPARKLE_PRIVATE_KEY" > "$TOWN_DOCK_SPARKLE_KEY_FILE"
+          chmod 600 "$TOWN_DOCK_SPARKLE_KEY_FILE"
+          .build/artifacts/sparkle/Sparkle/bin/generate_appcast \
+            --ed-key-file "$TOWN_DOCK_SPARKLE_KEY_FILE" \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/" \
+            dist/updates
+
+      - name: Verify release artifacts
+        shell: bash
+        run: |
+          codesign --verify --deep --strict --verbose=2 "dist/Town Dock.app"
+          spctl --assess --type execute --verbose=2 "dist/Town Dock.app"
+          test -f dist/updates/appcast.xml
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          TOWN_DOCK_RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "dist/updates/Town-Dock-$TOWN_DOCK_RELEASE_VERSION.zip" \
+            dist/updates/appcast.xml \
+            --verify-tag \
+            --generate-notes \
+            --title "Town Dock $TOWN_DOCK_RELEASE_VERSION"
