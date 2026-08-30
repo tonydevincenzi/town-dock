@@ -41,7 +41,6 @@ struct WorktreeCard: View {
             if isExpanded {
                 details
                     .padding(.top, 14)
-                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .padding(14)
@@ -50,7 +49,6 @@ struct WorktreeCard: View {
             RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .stroke(isExpanded ? TownTheme.strongBorder : TownTheme.border, lineWidth: 1)
         }
-        .animation(.easeOut(duration: 0.16), value: isExpanded)
         .confirmationDialog(
             "Force-kill every verified process for \(worktree.displayName)?",
             isPresented: $confirmForceKill,
