@@ -228,7 +228,11 @@ public actor TownControlEngine {
                !listenerGroups.contains(process.processGroupID) {
                 continue
             }
-            let ownershipRoot = orphan.missingPath ?? process.workingDirectory
+            // A deleted-worktree orphan can include a launcher rooted in the
+            // vanished checkout and backends rooted in their owned state
+            // directory. Pin every PID to its own freshly observed cwd instead
+            // of forcing the whole process tree under the missing checkout.
+            let ownershipRoot = process.workingDirectory ?? orphan.missingPath
             guard let ownershipRoot else {
                 throw TownDockError.unsafeOperation(
                     "Refusing an orphan process without a verifiable working directory."
@@ -253,7 +257,9 @@ public actor TownControlEngine {
 
         var affected = Set(launchers.map(\.pid))
         for process in verified {
-            let ownershipRoot = orphan.missingPath ?? process.workingDirectory!
+            guard let ownershipRoot = process.workingDirectory ?? orphan.missingPath else {
+                continue
+            }
             guard try processStillMatches(process, ownedByAny: [ownershipRoot]) else { continue }
             try signal(process.pid, SIGKILL)
             affected.insert(process.pid)

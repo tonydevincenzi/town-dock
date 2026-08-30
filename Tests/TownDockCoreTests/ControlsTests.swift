@@ -216,13 +216,14 @@ final class ControlsTests: XCTestCase {
     func testOrphanKillAcceptsDiscoveredUnderscoreStartToken() async throws {
         let recorder = ControlInvocationRecorder()
         let missingPath = "/tmp/deleted-town-worktree"
+        let processPath = "/tmp/owned-convex-state"
         let process = ProcessIdentity(
             pid: 4_242,
             parentPID: 1,
             processGroupID: 4_200,
             startToken: "Sat_Aug_29_13:00:00_2026",
             command: "convex-local-backend",
-            workingDirectory: missingPath
+            workingDirectory: processPath
         )
         let orphan = OrphanSnapshot(
             id: "deleted-worktree-3",
@@ -245,7 +246,7 @@ final class ControlsTests: XCTestCase {
                 }
                 if arguments.contains("cwd") {
                     return CommandResult(
-                        stdout: "p4242\nfcwd\nn\(missingPath) (deleted)\n",
+                        stdout: "p4242\nfcwd\nn\(processPath)\n",
                         stderr: "",
                         terminationStatus: 0
                     )
