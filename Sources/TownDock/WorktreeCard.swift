@@ -3,6 +3,7 @@ import TownDockCore
 
 struct WorktreeCard: View {
     @EnvironmentObject private var store: TownStore
+    @State private var isExpanded = false
     @State private var showHealth = false
     @State private var confirmForceKill = false
 
@@ -14,34 +15,41 @@ struct WorktreeCard: View {
         worktree.health?.overall ?? (isRunning ? .running : .stopped)
     }
 
+    private var orderedServices: [ServiceSnapshot] {
+        guard let services = worktree.instance?.services else { return [] }
+        return services.sorted {
+            let leftRunning = $0.state == .running || $0.state == .degraded
+            let rightRunning = $1.state == .running || $1.state == .degraded
+            if leftRunning != rightRunning { return leftRunning }
+            return servicePriority($0.kind) < servicePriority($1.kind)
+        }
+    }
+
+    private var visibleServices: [ServiceSnapshot] {
+        Array(orderedServices.filter { $0.state == .running || $0.state == .degraded }.prefix(4))
+    }
+
+    private var hiddenServiceCount: Int {
+        max(0, orderedServices.count - visibleServices.count)
+    }
+
     var body: some View {
-        InsetCard {
-            VStack(alignment: .leading, spacing: 14) {
-                header
+        VStack(alignment: .leading, spacing: 0) {
+            summary
 
-                if let instance = worktree.instance {
-                    instanceSummary(instance)
-                    if !instance.services.isEmpty {
-                        ServiceGrid(services: instance.services)
-                    }
-                } else {
-                    HStack(spacing: 7) {
-                        Image(systemName: "pause.circle")
-                        Text(worktree.setupComplete ? "No Town services detected" : "Worktree setup is incomplete")
-                    }
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                }
-
-                if let health = worktree.health,
-                   !health.probes.isEmpty || !health.recommendations.isEmpty {
-                    healthDisclosure(health)
-                }
-
-                Divider()
-                controls
+            if isExpanded {
+                details
+                    .padding(.top, 14)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .padding(14)
+        .background(TownTheme.surface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .stroke(isExpanded ? TownTheme.strongBorder : TownTheme.border, lineWidth: 1)
+        }
+        .animation(.easeOut(duration: 0.16), value: isExpanded)
         .confirmationDialog(
             "Force-kill every verified process for \(worktree.displayName)?",
             isPresented: $confirmForceKill,
@@ -56,83 +64,184 @@ struct WorktreeCard: View {
         }
     }
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 8) {
-                    StatusDot(state: overallState, size: 9)
+    private var summary: some View {
+        HStack(alignment: .center, spacing: 12) {
+            StatusDot(state: overallState, size: 9)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 7) {
                     Text(worktree.displayName)
-                        .font(.headline)
+                        .font(.system(size: 14, weight: .semibold))
                         .lineLimit(1)
 
-                    if worktree.isPrimary {
-                        badge("PRIMARY", tint: .blue)
-                    }
                     if worktree.gitStatus.isDirty {
                         badge("DIRTY", tint: .orange)
-                            .help("This worktree has modified, staged, or untracked files. Nuke would permanently remove those local changes.")
+                            .help("This worktree has modified, staged, or untracked files.")
                     }
-                    if let frontend = worktree.instance?.services.first(where: { $0.kind == .frontend }) {
-                        badge(
-                            "LOCALHOST :\(frontend.port)",
-                            tint: frontend.state == .running || frontend.state == .degraded ? .green : .secondary
-                        )
-                        .help(
-                            frontend.state == .running || frontend.state == .degraded
-                                ? "Frontend is available at http://localhost:\(frontend.port)"
-                                : "Reserved frontend port; it is not currently listening"
-                        )
+                    if worktree.health?.overall == .degraded {
+                        badge("DEGRADED", tint: .orange)
+                    }
+                    if !worktree.setupComplete {
+                        badge("INCOMPLETE", tint: .orange)
                     }
                     if worktree.isLocked {
                         Image(systemName: "lock.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .font(.caption2)
+                            .foregroundStyle(TownTheme.muted)
                             .help("Git worktree is locked")
                     }
                 }
 
-                Text(worktree.path)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                    .help(worktree.path)
+                portSummary
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if isOperating {
+                ProgressView()
+                    .controlSize(.small)
             }
 
-            Spacer()
+            primaryAction
+            overflowMenu
 
-            Menu {
-                Button("Open Folder in Finder") { store.revealInFinder(path: worktree.path) }
-                Button("Open in Terminal") { store.openTerminal(at: worktree.path) }
-                Button("Copy Path") { store.copy(worktree.path) }
-                Button("Copy Commit") { store.copy(worktree.head) }
-                if let url = worktree.frontendURL {
-                    Divider()
-                    Button("Open Frontend in Chrome") { store.openInChrome(url) }
-                    Button("Copy Frontend URL") { store.copy(url.absoluteString) }
-                }
-                if !worktree.isPrimary {
-                    Divider()
-                    Button("Nuke Worktree…", role: .destructive) { store.requestNuke(worktree) }
-                }
+            Button {
+                isExpanded.toggle()
             } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.body)
+                Image(systemName: "chevron.down")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(TownTheme.muted)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .frame(width: 24, height: 24)
+                    .contentShape(Rectangle())
             }
-            .menuStyle(.borderlessButton)
-            .tint(TownTheme.muted)
-            .fixedSize()
+            .buttonStyle(.plain)
+            .help(isExpanded ? "Hide details" : "Show details")
+            .accessibilityLabel(isExpanded ? "Hide worktree details" : "Show worktree details")
+        }
+    }
+
+    @ViewBuilder
+    private var portSummary: some View {
+        if !visibleServices.isEmpty {
+            HStack(spacing: 6) {
+                ForEach(visibleServices) { service in
+                    CompactPortChip(service: service)
+                }
+                if hiddenServiceCount > 0 {
+                    Text("+\(hiddenServiceCount)")
+                        .font(.caption2.monospacedDigit().weight(.medium))
+                        .foregroundStyle(TownTheme.muted)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                        .help("\(hiddenServiceCount) more service\(hiddenServiceCount == 1 ? "" : "s")")
+                }
+            }
+        } else {
+            Label(
+                worktree.setupComplete ? "No services running" : "Setup incomplete",
+                systemImage: worktree.setupComplete ? "pause.circle" : "exclamationmark.circle"
+            )
+            .font(.caption)
+            .foregroundStyle(TownTheme.muted)
+        }
+    }
+
+    @ViewBuilder
+    private var primaryAction: some View {
+        if isRunning, let url = worktree.frontendURL {
+            Button {
+                store.openInChrome(url)
+            } label: {
+                Label("Open", systemImage: "arrow.up.right")
+            }
+            .buttonStyle(LinearButtonStyle())
+            .disabled(isOperating)
+        } else if !isRunning {
+            Button {
+                store.start(worktree)
+            } label: {
+                Label("Start", systemImage: "play.fill")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(isOperating || !worktree.setupComplete)
+        }
+    }
+
+    private var overflowMenu: some View {
+        Menu {
+            Button("Open Folder in Finder") { store.revealInFinder(path: worktree.path) }
+            Button("Open in Terminal") { store.openTerminal(at: worktree.path) }
+            Button("Copy Path") { store.copy(worktree.path) }
+            Button("Copy Commit") { store.copy(worktree.head) }
+
+            if let url = worktree.frontendURL {
+                Divider()
+                Button("Open Frontend in Chrome") { store.openInChrome(url) }
+                Button("Copy Frontend URL") { store.copy(url.absoluteString) }
+            }
+
+            if isRunning {
+                Divider()
+                Button("Force Kill All…", role: .destructive) { confirmForceKill = true }
+                    .disabled(isOperating)
+            }
+
+            if !worktree.isPrimary {
+                Divider()
+                Button("Nuke Worktree…", role: .destructive) { store.requestNuke(worktree) }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(TownTheme.muted)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .help("More actions")
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            Divider()
+
+            Text(worktree.path)
+                .font(.caption.monospaced())
+                .foregroundStyle(TownTheme.muted)
+                .lineLimit(1)
+                .truncationMode(.middle)
+                .textSelection(.enabled)
+                .help(worktree.path)
+
+            if let instance = worktree.instance {
+                instanceSummary(instance)
+                if !instance.services.isEmpty {
+                    ServiceGrid(services: instance.services)
+                }
+            }
+
+            if let health = worktree.health,
+               !health.probes.isEmpty || !health.recommendations.isEmpty {
+                healthDisclosure(health)
+            }
+
+            Divider()
+            secondaryControls
         }
     }
 
     private func instanceSummary(_ instance: InstanceSnapshot) -> some View {
         HStack(spacing: 14) {
             Label("Instance \(instance.number)", systemImage: "number.circle")
-            Label(instance.confidence.rawValue.capitalized, systemImage: "scope")
-                .foregroundStyle(instance.confidence.tint)
+            if instance.confidence != .certain {
+                Label(instance.confidence.rawValue.capitalized, systemImage: "scope")
+                    .foregroundStyle(instance.confidence.tint)
+            }
             if !instance.processes.isEmpty {
-                Label("\(instance.processes.count) stack processes", systemImage: "cpu")
+                Label("\(instance.processes.count) processes", systemImage: "cpu")
             }
             let memory = instance.processes.reduce(UInt64(0)) { $0 + $1.residentBytes }
             if memory > 0 {
@@ -183,17 +292,8 @@ struct WorktreeCard: View {
         }
     }
 
-    private var controls: some View {
+    private var secondaryControls: some View {
         HStack(spacing: 8) {
-            if let url = worktree.frontendURL {
-                Button {
-                    store.openInChrome(url)
-                } label: {
-                    Label("Chrome", systemImage: "safari")
-                }
-                .buttonStyle(LinearButtonStyle())
-            }
-
             Button {
                 store.revealInFinder(path: worktree.path)
             } label: {
@@ -210,12 +310,6 @@ struct WorktreeCard: View {
 
             Spacer()
 
-            if isOperating {
-                ProgressView()
-                    .controlSize(.small)
-                    .padding(.trailing, 4)
-            }
-
             if isRunning {
                 Button("Stop", systemImage: "stop.fill") { store.stop(worktree) }
                     .buttonStyle(LinearButtonStyle())
@@ -223,17 +317,6 @@ struct WorktreeCard: View {
                 Button("Restart", systemImage: "arrow.clockwise") { store.restart(worktree) }
                     .buttonStyle(LinearButtonStyle())
                     .disabled(isOperating)
-                Button(role: .destructive) {
-                    confirmForceKill = true
-                } label: {
-                    Label("Kill All", systemImage: "xmark.octagon")
-                }
-                .buttonStyle(LinearButtonStyle(destructive: true))
-                .disabled(isOperating)
-            } else {
-                Button("Start", systemImage: "play.fill") { store.start(worktree) }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isOperating || !worktree.setupComplete)
             }
         }
         .controlSize(.small)
@@ -251,5 +334,69 @@ struct WorktreeCard: View {
                 RoundedRectangle(cornerRadius: 4, style: .continuous)
                     .stroke(tint.opacity(0.13), lineWidth: 1)
             }
+    }
+
+    private func servicePriority(_ kind: ServiceKind) -> Int {
+        switch kind {
+        case .frontend: 0
+        case .electric: 1
+        case .convexBackend: 2
+        case .convexSiteProxy: 3
+        case .harness: 4
+        case .drizzleStudio: 5
+        case .convexDashboard: 6
+        default: 20
+        }
+    }
+}
+
+private struct CompactPortChip: View {
+    @EnvironmentObject private var store: TownStore
+
+    let service: ServiceSnapshot
+
+    var body: some View {
+        Group {
+            if service.kind.isBrowserTarget, let url = service.url {
+                Button {
+                    store.openInChrome(url)
+                } label: {
+                    chipLabel
+                }
+                .buttonStyle(.plain)
+            } else {
+                chipLabel
+            }
+        }
+        .help(service.kind.isBrowserTarget && service.url != nil
+              ? "Open \(service.kind.displayName) on localhost:\(service.port)"
+              : "\(service.kind.displayName) on localhost:\(service.port)")
+        .contextMenu {
+            if let url = service.url {
+                Button("Open in Chrome") { store.openInChrome(url) }
+                Button("Copy URL") { store.copy(url.absoluteString) }
+            }
+            Button("Copy Port") { store.copy(String(service.port)) }
+        }
+    }
+
+    private var chipLabel: some View {
+        HStack(spacing: 5) {
+            StatusDot(state: service.state, size: 6)
+            Text(service.kind.displayName)
+                .lineLimit(1)
+            Text(":\(service.port)")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+        }
+        .font(.caption2.weight(.medium))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 4)
+        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                .stroke(TownTheme.border, lineWidth: 1)
+        }
+        .contentShape(Rectangle())
     }
 }
