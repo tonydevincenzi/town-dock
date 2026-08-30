@@ -260,7 +260,7 @@ struct WorktreeCard: View {
     }
 
     private func processDisclosure(_ processes: [ProcessIdentity]) -> some View {
-        DisclosureGroup(isExpanded: $showProcesses) {
+        SnapDisclosure(isExpanded: $showProcesses) {
             VStack(spacing: 0) {
                 ForEach(processes) { process in
                     ProcessRow(process: process)
@@ -275,7 +275,7 @@ struct WorktreeCard: View {
     }
 
     private func healthDisclosure(_ health: HealthSnapshot) -> some View {
-        DisclosureGroup(isExpanded: $showHealth) {
+        SnapDisclosure(isExpanded: $showHealth) {
             VStack(alignment: .leading, spacing: 9) {
                 ForEach(health.probes) { probe in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {

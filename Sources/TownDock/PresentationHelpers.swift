@@ -33,6 +33,52 @@ struct LinearButtonStyle: ButtonStyle {
     }
 }
 
+/// A disclosure control whose content is inserted and removed immediately.
+/// SwiftUI's DisclosureGroup applies a built-in layout animation even when its
+/// surrounding view does not request one, which feels sluggish in this dense UI.
+struct SnapDisclosure<Label: View, Content: View>: View {
+    @Binding var isExpanded: Bool
+    @ViewBuilder let content: Content
+    @ViewBuilder let label: Label
+
+    init(
+        isExpanded: Binding<Bool>,
+        @ViewBuilder content: () -> Content,
+        @ViewBuilder label: () -> Label
+    ) {
+        _isExpanded = isExpanded
+        self.content = content()
+        self.label = label()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button {
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 7) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .frame(width: 10)
+                    label
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                content
+            }
+        }
+    }
+}
+
 extension WorktreeSnapshot {
     var displayName: String {
         if let branch, !branch.isEmpty { return branch }

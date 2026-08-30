@@ -5,15 +5,24 @@ import TownDockCore
 struct DashboardView: View {
     @EnvironmentObject private var store: TownStore
     @State private var selection: DashboardSection = .worktrees
+    @State private var isSidebarVisible = true
 
     var body: some View {
-        NavigationSplitView {
-            sidebar
-        } detail: {
+        HStack(spacing: 0) {
+            if isSidebarVisible {
+                sidebar
+                    .frame(width: 215)
+
+                Rectangle()
+                    .fill(TownTheme.border)
+                    .frame(width: 1)
+            }
+
             detail
                 .background(TownTheme.canvas.ignoresSafeArea())
-                .toolbar { toolbar }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .toolbar { toolbar }
         .navigationTitle("Town Dock")
         .preferredColorScheme(.dark)
         .tint(TownTheme.accent)
@@ -27,6 +36,9 @@ struct DashboardView: View {
         }
         .overlay(alignment: .top) {
             notificationOverlay
+        }
+        .transaction { transaction in
+            transaction.animation = nil
         }
     }
 
@@ -83,7 +95,6 @@ struct DashboardView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(TownTheme.sidebar)
-        .navigationSplitViewColumnWidth(min: 190, ideal: 215, max: 255)
     }
 
     private func sidebarSection<Content: View>(
@@ -149,6 +160,16 @@ struct DashboardView: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         ToolbarItemGroup {
+            Button {
+                isSidebarVisible.toggle()
+            } label: {
+                Label(
+                    isSidebarVisible ? "Hide Sidebar" : "Show Sidebar",
+                    systemImage: "sidebar.left"
+                )
+            }
+            .help(isSidebarVisible ? "Hide sidebar" : "Show sidebar")
+
             if store.isRefreshing {
                 ProgressView()
                     .controlSize(.small)
@@ -177,14 +198,12 @@ struct DashboardView: View {
             }
                 .padding(.top, 10)
                 .padding(.horizontal, 18)
-                .transition(.move(edge: .top).combined(with: .opacity))
         } else if let message = store.activityMessage {
             NotificationBanner(text: message, style: .success) {
                 store.dismissActivity()
             }
             .padding(.top, 10)
             .padding(.horizontal, 18)
-            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 }
@@ -334,6 +353,7 @@ private struct OrphansDashboard: View {
 private struct OrphanCard: View {
     @EnvironmentObject private var store: TownStore
     @State private var confirmKill = false
+    @State private var showProcesses = false
 
     let orphan: OrphanSnapshot
 
@@ -399,7 +419,7 @@ private struct OrphanCard: View {
                 }
 
                 if !orphan.processes.isEmpty {
-                    DisclosureGroup("\(orphan.processes.count) attributed processes") {
+                    SnapDisclosure(isExpanded: $showProcesses) {
                         VStack(spacing: 0) {
                             ForEach(orphan.processes) { process in
                                 ProcessRow(process: process)
@@ -407,6 +427,8 @@ private struct OrphanCard: View {
                             }
                         }
                         .padding(.top, 7)
+                    } label: {
+                        Text("\(orphan.processes.count) attributed processes")
                     }
                     .font(.caption.weight(.medium))
                 }
