@@ -79,12 +79,13 @@ final class DiscoveryParsersTests: XCTestCase {
 
     func testParsesPSMetadataAndRedactsCommandSecrets() throws {
         let records = PSMetadataParser.parse(
-            "  42  1  42 Sat Aug 29 13:00:00 2026 1234 /usr/bin/node server.js --admin-key secret-value\n"
+            "  42  1  42 Sat Aug 29 13:00:00 2026 12.5 1234 /usr/bin/node server.js --admin-key secret-value\n"
         )
         let process = try XCTUnwrap(records.first)
         XCTAssertEqual(process.pid, 42)
         XCTAssertEqual(process.parentPID, 1)
         XCTAssertEqual(process.processGroupID, 42)
+        XCTAssertEqual(process.cpuPercent, 12.5)
         XCTAssertEqual(process.residentBytes, 1_263_616)
         XCTAssertFalse(process.command.contains("secret-value"))
         XCTAssertTrue(process.command.contains("[REDACTED]"))
@@ -150,6 +151,13 @@ final class DiscoveryParsersTests: XCTestCase {
         XCTAssertEqual(container.id, "abcdef123456")
         XCTAssertEqual(container.instanceNumber, 13)
         XCTAssertEqual(container.publishedPorts, [3_140])
+
+        let withStats = DockerInventoryParser.addingStats(
+            #"{"Name":"harness-electric-13","CPUPerc":"4.25%","MemUsage":"321.2MiB / 7.748GiB"}"#,
+            to: containers
+        )
+        XCTAssertEqual(withStats.first?.cpuPercent, 4.25)
+        XCTAssertEqual(withStats.first?.residentBytes, 336_802_611)
 
         let volumes = DockerInventoryParser.parseVolumes(
             #"{"Name":"harness-electric-data-8","Driver":"local","Labels":"TOKEN=must-not-be-retained"}"#

@@ -252,6 +252,7 @@ public struct PSProcessRecord: Hashable, Sendable {
     public let parentPID: Int32
     public let processGroupID: Int32
     public let startToken: String
+    public let cpuPercent: Double
     public let residentBytes: UInt64
     public let command: String
 
@@ -260,6 +261,7 @@ public struct PSProcessRecord: Hashable, Sendable {
         parentPID: Int32,
         processGroupID: Int32,
         startToken: String,
+        cpuPercent: Double,
         residentBytes: UInt64,
         command: String
     ) {
@@ -267,6 +269,7 @@ public struct PSProcessRecord: Hashable, Sendable {
         self.parentPID = parentPID
         self.processGroupID = processGroupID
         self.startToken = startToken
+        self.cpuPercent = cpuPercent
         self.residentBytes = residentBytes
         self.command = command
     }
@@ -275,7 +278,7 @@ public struct PSProcessRecord: Hashable, Sendable {
 public enum PSMetadataParser {
     public static func parse(_ text: String) -> [PSProcessRecord] {
         guard let expression = try? NSRegularExpression(
-            pattern: #"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(\d+)\s*(.*)$"#
+            pattern: #"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+([0-9]+(?:\.[0-9]+)?)\s+(\d+)\s*(.*)$"#
         ) else {
             return []
         }
@@ -283,13 +286,14 @@ public enum PSMetadataParser {
         return text.components(separatedBy: .newlines).compactMap { line in
             let range = NSRange(line.startIndex..<line.endIndex, in: line)
             guard let match = expression.firstMatch(in: line, range: range),
-                  match.numberOfRanges == 7,
+                  match.numberOfRanges == 8,
                   let pid = capture(match, 1, line).flatMap(Int32.init),
                   let parent = capture(match, 2, line).flatMap(Int32.init),
                   let group = capture(match, 3, line).flatMap(Int32.init),
                   let start = capture(match, 4, line),
-                  let rssKB = capture(match, 5, line).flatMap(UInt64.init),
-                  let command = capture(match, 6, line)
+                  let cpuPercent = capture(match, 5, line).flatMap(Double.init),
+                  let rssKB = capture(match, 6, line).flatMap(UInt64.init),
+                  let command = capture(match, 7, line)
             else {
                 return nil
             }
@@ -298,6 +302,7 @@ public enum PSMetadataParser {
                 parentPID: parent,
                 processGroupID: group,
                 startToken: start.replacingOccurrences(of: " ", with: "_"),
+                cpuPercent: cpuPercent,
                 residentBytes: rssKB.multipliedReportingOverflow(by: 1_024).overflow
                     ? UInt64.max
                     : rssKB * 1_024,
@@ -506,6 +511,8 @@ public struct DockerContainerRecord: Hashable, Sendable {
     public let status: String
     public let publishedPorts: [Int]
     public let instanceNumber: Int?
+    public let cpuPercent: Double?
+    public let residentBytes: UInt64?
 
     public init(
         id: String,
@@ -513,7 +520,9 @@ public struct DockerContainerRecord: Hashable, Sendable {
         state: String,
         status: String,
         publishedPorts: [Int],
-        instanceNumber: Int?
+        instanceNumber: Int?,
+        cpuPercent: Double? = nil,
+        residentBytes: UInt64? = nil
     ) {
         self.id = id
         self.name = name
@@ -521,6 +530,8 @@ public struct DockerContainerRecord: Hashable, Sendable {
         self.status = status
         self.publishedPorts = publishedPorts
         self.instanceNumber = instanceNumber
+        self.cpuPercent = cpuPercent
+        self.residentBytes = residentBytes
     }
 }
 
@@ -575,6 +586,42 @@ public enum DockerInventoryParser {
         }
     }
 
+    public static func addingStats(
+        _ text: String,
+        to containers: [DockerContainerRecord]
+    ) -> [DockerContainerRecord] {
+        let statsByName = Dictionary(uniqueKeysWithValues: text.components(separatedBy: .newlines).compactMap {
+            line -> (String, (Double, UInt64))? in
+            guard let data = line.data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else {
+                return nil
+            }
+            let name = safeName(string(object, keys: ["Name"])).lowercased()
+            guard !name.isEmpty,
+                  let cpuPercent = percent(string(object, keys: ["CPUPerc"])),
+                  let residentBytes = memoryBytes(string(object, keys: ["MemUsage"]))
+            else {
+                return nil
+            }
+            return (name, (cpuPercent, residentBytes))
+        })
+
+        return containers.map { container in
+            let stats = statsByName[container.name.lowercased()]
+            return DockerContainerRecord(
+                id: container.id,
+                name: container.name,
+                state: container.state,
+                status: container.status,
+                publishedPorts: container.publishedPorts,
+                instanceNumber: container.instanceNumber,
+                cpuPercent: stats?.0,
+                residentBytes: stats?.1
+            )
+        }
+    }
+
     private static func string(_ object: [String: Any], keys: [String]) -> String {
         for key in keys {
             if let value = object[key] as? String { return value }
@@ -589,6 +636,46 @@ public enum DockerInventoryParser {
 
     private static func safeIdentifier(_ value: String) -> String {
         String(value.prefix(128)).filter { $0.isHexDigit || $0 == "-" || $0 == "_" }
+    }
+
+    private static func percent(_ value: String) -> Double? {
+        Double(value.trimmingCharacters(in: CharacterSet(charactersIn: "% ")))
+    }
+
+    private static func memoryBytes(_ value: String) -> UInt64? {
+        let token = value.components(separatedBy: "/").first?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard let expression = try? NSRegularExpression(
+            pattern: #"^([0-9]+(?:\.[0-9]+)?)\s*([KMGT]?i?B)$"#,
+            options: [.caseInsensitive]
+        ),
+        let match = expression.firstMatch(
+            in: token,
+            range: NSRange(token.startIndex..<token.endIndex, in: token)
+        ),
+        let numberRange = Range(match.range(at: 1), in: token),
+        let unitRange = Range(match.range(at: 2), in: token),
+        let number = Double(token[numberRange])
+        else {
+            return nil
+        }
+
+        let unit = token[unitRange].lowercased()
+        let multiplier: Double = switch unit {
+        case "kb": 1_000
+        case "kib": 1_024
+        case "mb": 1_000_000
+        case "mib": 1_048_576
+        case "gb": 1_000_000_000
+        case "gib": 1_073_741_824
+        case "tb": 1_000_000_000_000
+        case "tib": 1_099_511_627_776
+        default: 1
+        }
+        let bytes = number * multiplier
+        guard bytes.isFinite, bytes >= 0 else { return nil }
+        guard bytes < Double(UInt64.max) else { return UInt64.max }
+        return UInt64(bytes.rounded())
     }
 
     private static func publishedPorts(_ value: String) -> [Int] {

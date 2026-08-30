@@ -58,6 +58,7 @@ private final class DiscoveryCache: @unchecked Sendable {
     private var fullFilesRefreshing = false
     private var dockerInventory: DockerInventory?
     private var dockerUpdatedAt: Date?
+    private var dockerRefreshing = false
 
     func stateSizeSnapshot(now: Date, interval: TimeInterval) -> ([String: UInt64], Bool) {
         lock.lock()
@@ -93,22 +94,23 @@ private final class DiscoveryCache: @unchecked Sendable {
         lock.unlock()
     }
 
-    func dockerSnapshot(now: Date, interval: TimeInterval) -> DockerInventory? {
+    func dockerSnapshot(
+        now: Date,
+        interval: TimeInterval
+    ) -> (inventory: DockerInventory?, shouldRefresh: Bool) {
         lock.lock()
         defer { lock.unlock() }
-        guard let inventory = dockerInventory,
-              let updatedAt = dockerUpdatedAt,
-              now.timeIntervalSince(updatedAt) < interval
-        else {
-            return nil
-        }
-        return inventory
+        let stale = dockerUpdatedAt.map { now.timeIntervalSince($0) >= interval } ?? true
+        let refresh = stale && !dockerRefreshing
+        if refresh { dockerRefreshing = true }
+        return (dockerInventory, refresh)
     }
 
     func finishDocker(_ inventory: DockerInventory) {
         lock.lock()
         dockerInventory = inventory
         dockerUpdatedAt = Date()
+        dockerRefreshing = false
         lock.unlock()
     }
 }
@@ -233,6 +235,7 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
             fileEvidence: fileEvidence
         )
         let listenersByPort = Dictionary(grouping: listeners, by: \.port)
+        let docker = scanDockerInventory(warnings: &warnings)
 
         var worktrees: [WorktreeSnapshot] = []
         for (index, scan) in scans.enumerated() {
@@ -250,7 +253,9 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 )
                 let services = makeServices(
                     instance: attribution.number,
-                    listenersByPort: listenersByPort
+                    listenersByPort: listenersByPort,
+                    processByPID: processByPID,
+                    docker: docker
                 )
                 instance = InstanceSnapshot(
                     number: attribution.number,
@@ -284,7 +289,6 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
             )
         }
 
-        let docker = scanDockerInventory(warnings: &warnings)
         let orphans = makeOrphans(
             worktreeScans: scans,
             attributions: attributions,
@@ -307,7 +311,11 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 return (lhs.branch ?? lhs.path).localizedStandardCompare(rhs.branch ?? rhs.path) == .orderedAscending
             },
             orphans: orphans,
-            sharedServices: makeSharedServices(listenersByPort: listenersByPort),
+            sharedServices: makeSharedServices(
+                listenersByPort: listenersByPort,
+                processByPID: processByPID,
+                docker: docker
+            ),
             dormantStates: dormantStates.sorted {
                 ($0.instanceNumber ?? Int.max) < ($1.instanceNumber ?? Int.max)
             },
@@ -396,7 +404,7 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         do {
             let result = try runner.run(
                 .ps,
-                arguments: ["-axo", "pid=,ppid=,pgid=,lstart=,rss=,command="],
+                arguments: ["-axo", "pid=,ppid=,pgid=,lstart=,pcpu=,rss=,command="],
                 timeout: 4,
                 maxOutputBytes: 8 * 1_024 * 1_024
             )
@@ -563,7 +571,8 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 command: record.command,
                 executablePath: evidence[record.pid]?.executablePath,
                 workingDirectory: evidence[record.pid]?.workingDirectory,
-                residentBytes: record.residentBytes
+                residentBytes: record.residentBytes,
+                cpuPercent: record.cpuPercent
             )
         }
     }
@@ -741,10 +750,18 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
 
     private func makeServices(
         instance: Int,
-        listenersByPort: [Int: [ListenerRecord]]
+        listenersByPort: [Int: [ListenerRecord]],
+        processByPID: [Int32: PSProcessRecord],
+        docker: DockerInventory
     ) -> [ServiceSnapshot] {
         TownPorts.services(instance).map { kind, port in
             let records = listenersByPort[port, default: []]
+            let metrics = serviceMetrics(
+                port: port,
+                listeners: records,
+                processByPID: processByPID,
+                docker: docker
+            )
             return ServiceSnapshot(
                 kind: kind,
                 port: port,
@@ -752,16 +769,26 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 url: browserURL(kind: kind, port: port),
                 processIDs: Array(Set(records.map(\.pid))).sorted(),
                 detail: nil,
-                isShared: false
+                isShared: false,
+                cpuPercent: metrics?.cpuPercent,
+                residentBytes: metrics?.residentBytes
             )
         }
     }
 
     private func makeSharedServices(
-        listenersByPort: [Int: [ListenerRecord]]
+        listenersByPort: [Int: [ListenerRecord]],
+        processByPID: [Int32: PSProcessRecord],
+        docker: DockerInventory
     ) -> [ServiceSnapshot] {
         TownPorts.shared.map { kind, port in
             let records = listenersByPort[port, default: []]
+            let metrics = serviceMetrics(
+                port: port,
+                listeners: records,
+                processByPID: processByPID,
+                docker: docker
+            )
             return ServiceSnapshot(
                 kind: kind,
                 port: port,
@@ -769,9 +796,35 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 url: browserURL(kind: kind, port: port),
                 processIDs: Array(Set(records.map(\.pid))).sorted(),
                 detail: nil,
-                isShared: true
+                isShared: true,
+                cpuPercent: metrics?.cpuPercent,
+                residentBytes: metrics?.residentBytes
             )
         }
+    }
+
+    private func serviceMetrics(
+        port: Int,
+        listeners: [ListenerRecord],
+        processByPID: [Int32: PSProcessRecord],
+        docker: DockerInventory
+    ) -> (cpuPercent: Double, residentBytes: UInt64)? {
+        if let container = docker.containers.first(where: {
+            $0.publishedPorts.contains(port) && $0.cpuPercent != nil && $0.residentBytes != nil
+        }), let cpuPercent = container.cpuPercent, let residentBytes = container.residentBytes {
+            return (cpuPercent, residentBytes)
+        }
+
+        let processes = Set(listeners.map(\.pid)).compactMap { processByPID[$0] }
+        guard !processes.isEmpty else { return nil }
+        let residentBytes = processes.reduce(UInt64(0)) { total, process in
+            let (sum, overflow) = total.addingReportingOverflow(process.residentBytes)
+            return overflow ? UInt64.max : sum
+        }
+        return (
+            cpuPercent: processes.reduce(0) { $0 + $1.cpuPercent },
+            residentBytes: residentBytes
+        )
     }
 
     private func browserURL(kind: ServiceKind, port: Int) -> URL? {
@@ -862,26 +915,23 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
     }
 
     private func scanDockerInventory(warnings: inout [String]) -> DockerInventory {
-        if let cached = cache.dockerSnapshot(now: Date(), interval: 30) {
+        let (cached, shouldRefresh) = cache.dockerSnapshot(now: Date(), interval: 6)
+        if let cached {
+            if shouldRefresh {
+                let runner = self.runner
+                let cache = self.cache
+                Task.detached(priority: .utility) {
+                    let refreshed = (try? Self.loadDockerInventory(using: runner)) ?? cached
+                    cache.finishDocker(refreshed)
+                }
+            }
             return cached
         }
+        guard shouldRefresh else {
+            return DockerInventory(containers: [], volumes: [])
+        }
         do {
-            let containers = try runner.run(
-                .docker,
-                arguments: ["ps", "-a", "--no-trunc", "--format", "{{json .}}"],
-                timeout: 3,
-                maxOutputBytes: 2 * 1_024 * 1_024
-            )
-            let volumes = try runner.run(
-                .docker,
-                arguments: ["volume", "ls", "--format", "{{json .}}"],
-                timeout: 3,
-                maxOutputBytes: 2 * 1_024 * 1_024
-            )
-            let inventory = DockerInventory(
-                containers: DockerInventoryParser.parseContainers(containers.stdout),
-                volumes: DockerInventoryParser.parseVolumes(volumes.stdout)
-            )
+            let inventory = try Self.loadDockerInventory(using: runner)
             cache.finishDocker(inventory)
             return inventory
         } catch {
@@ -890,6 +940,40 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
             cache.finishDocker(empty)
             return empty
         }
+    }
+
+    private static func loadDockerInventory(using runner: CommandRunner) throws -> DockerInventory {
+        let containers = try runner.run(
+            .docker,
+            arguments: ["ps", "-a", "--no-trunc", "--format", "{{json .}}"],
+            timeout: 3,
+            maxOutputBytes: 2 * 1_024 * 1_024
+        )
+        let volumes = try runner.run(
+            .docker,
+            arguments: ["volume", "ls", "--format", "{{json .}}"],
+            timeout: 3,
+            maxOutputBytes: 2 * 1_024 * 1_024
+        )
+        let parsedContainers = DockerInventoryParser.parseContainers(containers.stdout)
+        let containersWithStats: [DockerContainerRecord]
+        if let stats = try? runner.run(
+            .docker,
+            arguments: ["stats", "--no-stream", "--format", "{{json .}}"],
+            timeout: 6,
+            maxOutputBytes: 2 * 1_024 * 1_024
+        ) {
+            containersWithStats = DockerInventoryParser.addingStats(
+                stats.stdout,
+                to: parsedContainers
+            )
+        } else {
+            containersWithStats = parsedContainers
+        }
+        return DockerInventory(
+            containers: containersWithStats,
+            volumes: DockerInventoryParser.parseVolumes(volumes.stdout)
+        )
     }
 
     private func makeOrphans(
@@ -945,7 +1029,12 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                         ? ["Town instance ports are listening, but no registered worktree claims them."]
                         : ["Town instance ports remain active after their working directory disappeared."],
                     processes: processes,
-                    services: makeServices(instance: number, listenersByPort: servicesByPort),
+                    services: makeServices(
+                        instance: number,
+                        listenersByPort: servicesByPort,
+                        processByPID: processByPID,
+                        docker: docker
+                    ),
                     stateDirectory: stateDirectories.first { state in
                         state.instanceNumber == number && pids.contains { pid in
                             fileEvidence[pid]?.workingDirectory.map {

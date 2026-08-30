@@ -427,7 +427,7 @@ private struct OrphanCard: View {
     }
 }
 
-private struct ProcessRow: View {
+struct ProcessRow: View {
     let process: ProcessIdentity
 
     private var processName: String {
@@ -454,6 +454,12 @@ private struct ProcessRow: View {
                 }
             }
             Spacer()
+            if let cpuPercent = process.cpuPercent {
+                Text(cpuPercent.cpuPercentLabel)
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .help("CPU usage")
+            }
             if process.residentBytes > 0 {
                 Text(process.residentBytes.byteCountLabel)
                     .font(.caption.monospacedDigit())

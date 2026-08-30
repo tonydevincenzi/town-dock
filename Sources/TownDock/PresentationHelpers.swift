@@ -82,6 +82,38 @@ extension UInt64 {
     }
 }
 
+extension Double {
+    var cpuPercentLabel: String {
+        if self > 0, self < 0.1 { return "<0.1%" }
+        if self >= 100 { return formatted(.number.precision(.fractionLength(0))) + "%" }
+        return formatted(.number.precision(.fractionLength(1))) + "%"
+    }
+}
+
+extension ServiceSnapshot {
+    var resourceSummary: String? {
+        var parts: [String] = []
+        if let cpuPercent {
+            parts.append("\(cpuPercent.cpuPercentLabel) CPU")
+        }
+        if let residentBytes {
+            parts.append(residentBytes.byteCountLabel)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    var compactResourceSummary: String? {
+        var parts: [String] = []
+        if let cpuPercent {
+            parts.append(cpuPercent.cpuPercentLabel)
+        }
+        if let residentBytes {
+            parts.append(residentBytes.byteCountLabel)
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+}
+
 extension Date {
     var relativeLabel: String {
         formatted(.relative(presentation: .named, unitsStyle: .abbreviated))

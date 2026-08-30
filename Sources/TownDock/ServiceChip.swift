@@ -18,6 +18,12 @@ struct ServiceChip: View {
                 Text(":\(service.port)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                if let resourceSummary = service.resourceSummary {
+                    Text(resourceSummary)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
             }
 
             Spacer(minLength: 3)
@@ -57,7 +63,13 @@ struct ServiceChip: View {
                 Text("PID \(service.processIDs.map(String.init).joined(separator: ", "))")
             }
         }
-        .help(service.detail ?? "\(service.kind.displayName) on port \(service.port)")
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        let serviceDescription = service.detail ?? "\(service.kind.displayName) on port \(service.port)"
+        guard let resourceSummary = service.resourceSummary else { return serviceDescription }
+        return "\(serviceDescription)\n\(resourceSummary)"
     }
 }
 

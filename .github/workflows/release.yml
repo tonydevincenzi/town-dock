@@ -43,6 +43,9 @@ jobs:
       - name: Resolve dependencies
         run: swift package resolve
 
+      - name: Run tests
+        run: swift test
+
       - name: Build signed application
         env:
           TOWN_DOCK_FEED_URL: https://github.com/${{ github.repository }}/releases/latest/download/appcast.xml

@@ -28,6 +28,16 @@ enum TownDockProbe {
                     .map(\.port).sorted().map(String.init).joined(separator: ",") ?? ""
                 let processCount = worktree.instance?.processes.count ?? 0
                 print("worktree \(label) instance=\(instance) processes=\(processCount) running=[\(runningPorts)]")
+                for service in worktree.instance?.services.filter({
+                    $0.state == .running || $0.state == .degraded
+                }) ?? [] {
+                    let cpu = service.cpuPercent.map { String(format: "%.1f", $0) } ?? "unknown"
+                    let memory = service.residentBytes.map(String.init) ?? "unknown"
+                    print(
+                        "  service \(service.kind.rawValue):\(service.port) "
+                            + "cpu=\(cpu)% rss=\(memory)"
+                    )
+                }
             }
             for orphan in snapshot.orphans {
                 let instance = orphan.instanceNumber.map(String.init) ?? "none"

@@ -5,6 +5,7 @@ struct WorktreeCard: View {
     @EnvironmentObject private var store: TownStore
     @State private var isExpanded = false
     @State private var showHealth = false
+    @State private var showProcesses = false
     @State private var confirmForceKill = false
 
     let worktree: WorktreeSnapshot
@@ -221,6 +222,9 @@ struct WorktreeCard: View {
                 if !instance.services.isEmpty {
                     ServiceGrid(services: instance.services)
                 }
+                if !instance.processes.isEmpty {
+                    processDisclosure(instance.processes)
+                }
             }
 
             if let health = worktree.health,
@@ -243,6 +247,10 @@ struct WorktreeCard: View {
             if !instance.processes.isEmpty {
                 Label("\(instance.processes.count) processes", systemImage: "cpu")
             }
+            let cpuPercent = instance.processes.compactMap(\.cpuPercent).reduce(0, +)
+            if !instance.processes.isEmpty {
+                Label("\(cpuPercent.cpuPercentLabel) CPU", systemImage: "gauge.with.dots.needle.33percent")
+            }
             let memory = instance.processes.reduce(UInt64(0)) { $0 + $1.residentBytes }
             if memory > 0 {
                 Label(memory.byteCountLabel, systemImage: "memorychip")
@@ -251,6 +259,21 @@ struct WorktreeCard: View {
         }
         .font(.caption)
         .foregroundStyle(TownTheme.muted)
+    }
+
+    private func processDisclosure(_ processes: [ProcessIdentity]) -> some View {
+        DisclosureGroup(isExpanded: $showProcesses) {
+            VStack(spacing: 0) {
+                ForEach(processes) { process in
+                    ProcessRow(process: process)
+                    if process.id != processes.last?.id { Divider() }
+                }
+            }
+            .padding(.top, 7)
+        } label: {
+            Text("\(processes.count) live process\(processes.count == 1 ? "" : "es")")
+                .font(.caption.weight(.semibold))
+        }
     }
 
     private func healthDisclosure(_ health: HealthSnapshot) -> some View {
@@ -381,13 +404,21 @@ private struct CompactPortChip: View {
     }
 
     private var chipLabel: some View {
-        HStack(spacing: 5) {
-            StatusDot(state: service.state, size: 6)
-            Text(service.kind.displayName)
-                .lineLimit(1)
-            Text(":\(service.port)")
-                .monospacedDigit()
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 5) {
+                StatusDot(state: service.state, size: 6)
+                Text(service.kind.displayName)
+                    .lineLimit(1)
+                Text(":\(service.port)")
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+            if let resourceSummary = service.compactResourceSummary {
+                Text(resourceSummary)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
+                    .foregroundStyle(TownTheme.muted)
+                    .lineLimit(1)
+            }
         }
         .font(.caption2.weight(.medium))
         .padding(.horizontal, 7)

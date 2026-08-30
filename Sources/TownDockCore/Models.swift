@@ -83,6 +83,7 @@ public struct ProcessIdentity: Identifiable, Codable, Hashable, Sendable {
     public let executablePath: String?
     public let workingDirectory: String?
     public let residentBytes: UInt64
+    public let cpuPercent: Double?
 
     public init(
         pid: Int32,
@@ -92,7 +93,8 @@ public struct ProcessIdentity: Identifiable, Codable, Hashable, Sendable {
         command: String,
         executablePath: String? = nil,
         workingDirectory: String? = nil,
-        residentBytes: UInt64 = 0
+        residentBytes: UInt64 = 0,
+        cpuPercent: Double? = nil
     ) {
         self.pid = pid
         self.parentPID = parentPID
@@ -102,6 +104,7 @@ public struct ProcessIdentity: Identifiable, Codable, Hashable, Sendable {
         self.executablePath = executablePath
         self.workingDirectory = workingDirectory
         self.residentBytes = residentBytes
+        self.cpuPercent = cpuPercent
     }
 }
 
@@ -114,6 +117,8 @@ public struct ServiceSnapshot: Identifiable, Codable, Hashable, Sendable {
     public let processIDs: [Int32]
     public let detail: String?
     public let isShared: Bool
+    public let cpuPercent: Double?
+    public let residentBytes: UInt64?
 
     public init(
         kind: ServiceKind,
@@ -122,7 +127,9 @@ public struct ServiceSnapshot: Identifiable, Codable, Hashable, Sendable {
         url: URL? = nil,
         processIDs: [Int32] = [],
         detail: String? = nil,
-        isShared: Bool = false
+        isShared: Bool = false,
+        cpuPercent: Double? = nil,
+        residentBytes: UInt64? = nil
     ) {
         self.kind = kind
         self.port = port
@@ -131,6 +138,8 @@ public struct ServiceSnapshot: Identifiable, Codable, Hashable, Sendable {
         self.processIDs = processIDs
         self.detail = detail
         self.isShared = isShared
+        self.cpuPercent = cpuPercent
+        self.residentBytes = residentBytes
     }
 }
 
