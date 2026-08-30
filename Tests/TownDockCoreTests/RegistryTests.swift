@@ -45,7 +45,8 @@ final class RegistryTests: XCTestCase {
         try await registry.record(snapshot: snapshot)
 
         let reloaded = TownRegistry(fileURL: fileURL)
-        let record = try XCTUnwrap(await reloaded.records().first)
+        let reloadedRecords = await reloaded.records()
+        let record = try XCTUnwrap(reloadedRecords.first)
         XCTAssertEqual(record.canonicalPath, "/tmp/town-two")
         XCTAssertEqual(record.instanceNumber, 2)
         XCTAssertEqual(record.stateDirectory, "/tmp/state-2")
@@ -92,7 +93,8 @@ final class RegistryTests: XCTestCase {
             dormantStates: []
         ))
 
-        XCTAssertEqual(await registry.records().first?.instanceNumber, 3)
+        let records = await registry.records()
+        XCTAssertEqual(records.first?.instanceNumber, 3)
     }
 
     private func fixtureWorktree(instance: InstanceSnapshot?) -> WorktreeSnapshot {
