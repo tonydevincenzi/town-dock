@@ -668,7 +668,8 @@ public actor NukeEngine {
     public func executeOrphanCleanup(
         manifest: OrphanCleanupManifest,
         repositoryPath: String,
-        confirmationText: String
+        confirmationText: String,
+        progress: (@Sendable (OrphanCleanupProgress) async -> Void)? = nil
     ) async throws -> OrphanCleanupResult {
         guard manifest.canExecute else {
             throw TownDockError.unsafeOperation("No safely attributable orphan resources are available.")
@@ -687,45 +688,82 @@ public actor NukeEngine {
             )
         }
 
+        let selectedTargets = currentManifest.targets.filter(\.selectedByDefault)
+        let totalTargets = selectedTargets.count
+        var completedTargets = 0
         var outcomes: [NukeTargetOutcome] = []
-        for target in currentManifest.targets
-            where target.selectedByDefault && target.kind == .processGroup
-        {
+        for target in selectedTargets where target.kind == .processGroup {
+            await progress?(OrphanCleanupProgress(
+                completedTargets: completedTargets,
+                totalTargets: totalTargets,
+                currentTargetLabel: target.label
+            ))
             guard let orphan = fresh.orphans.first(where: { $0.id == target.identifier }) else {
                 throw TownDockError.staleSnapshot("A reviewed orphan process tree disappeared.")
             }
-            let result = try await controlEngine.killOrphan(orphan)
-            outcomes.append(
-                NukeTargetOutcome(
-                    targetID: target.id,
-                    disposition: .removed,
-                    detail: result.message
+            do {
+                let result = try await controlEngine.killOrphan(orphan)
+                outcomes.append(
+                    NukeTargetOutcome(
+                        targetID: target.id,
+                        disposition: .removed,
+                        detail: result.message
+                    )
                 )
-            )
+                completedTargets += 1
+            } catch {
+                throw cleanupFailure(error, target: target, position: completedTargets + 1, total: totalTargets)
+            }
         }
 
         // Rediscover after process termination. Persistent resources are not
         // touched until every targeted backend is observed stopped.
         let afterProcesses = try await freshSnapshot(canonicalPath(repositoryPath))
-        for target in currentManifest.targets where target.selectedByDefault {
-            switch target.kind {
-            case .processGroup:
-                continue
-            case .dockerContainer:
-                outcomes.append(try removeDockerContainer(target))
-            case .dockerVolume:
-                outcomes.append(try removeDockerVolume(target))
-            case .postgresReplicationSlot:
-                outcomes.append(try removeReplicationSlot(target))
-            case .postgresDatabase:
-                outcomes.append(try removePostgresDatabase(target))
-            case .convexStateDirectory:
-                outcomes.append(try removeOrphanStateDirectory(target, snapshot: afterProcesses))
-            default:
-                throw TownDockError.unsupported("An unexpected orphan cleanup target was selected.")
+        for target in selectedTargets where target.kind != .processGroup {
+            await progress?(OrphanCleanupProgress(
+                completedTargets: completedTargets,
+                totalTargets: totalTargets,
+                currentTargetLabel: target.label
+            ))
+            do {
+                let outcome: NukeTargetOutcome
+                switch target.kind {
+                case .dockerContainer:
+                    outcome = try removeDockerContainer(target)
+                case .dockerVolume:
+                    outcome = try removeDockerVolume(target)
+                case .postgresReplicationSlot:
+                    outcome = try removeReplicationSlot(target)
+                case .postgresDatabase:
+                    outcome = try removePostgresDatabase(target)
+                case .convexStateDirectory:
+                    outcome = try removeOrphanStateDirectory(target, snapshot: afterProcesses)
+                default:
+                    throw TownDockError.unsupported("An unexpected orphan cleanup target was selected.")
+                }
+                outcomes.append(outcome)
+                completedTargets += 1
+            } catch {
+                throw cleanupFailure(error, target: target, position: completedTargets + 1, total: totalTargets)
             }
         }
+        await progress?(OrphanCleanupProgress(
+            completedTargets: completedTargets,
+            totalTargets: totalTargets,
+            currentTargetLabel: "Cleanup complete"
+        ))
         return OrphanCleanupResult(outcomes: outcomes)
+    }
+
+    private func cleanupFailure(
+        _ error: Error,
+        target: DestructiveTarget,
+        position: Int,
+        total: Int
+    ) -> TownDockError {
+        TownDockError.commandFailed(
+            "Cleanup stopped at \(target.label) (\(position) of \(total)): \(error.localizedDescription)"
+        )
     }
 
     private struct GitIdentity {
@@ -1245,7 +1283,7 @@ public actor NukeEngine {
         let query = replicationSlotLookupSQL(named: target.identifier)
         let record = try dockerPostgres(query).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !record.isEmpty else { return absent(target) }
-        guard record == "\(target.identifier)|\(expectedDatabase)|f" else {
+        guard record == "\(target.identifier)|\(expectedDatabase)|false" else {
             throw TownDockError.unsafeOperation(
                 "The replication slot is active or bound to a different database."
             )

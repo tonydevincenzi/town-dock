@@ -82,6 +82,81 @@ private final class NukeCommandFixture: @unchecked Sendable {
     }
 }
 
+private final class OrphanCleanupRetryFixture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var slotExists = true
+    private var databaseExists = true
+
+    func run(
+        tool: CommandTool,
+        arguments: [String],
+        workingDirectory: URL?,
+        allowedExitCodes: Set<Int32>
+    ) throws -> CommandResult {
+        XCTAssertEqual(tool, .docker)
+        XCTAssertNil(workingDirectory)
+
+        if arguments.starts(with: ["container", "inspect"]) {
+            XCTAssertTrue(allowedExitCodes.contains(1))
+            return CommandResult(stdout: "", stderr: "not found", terminationStatus: 1)
+        }
+        if arguments.starts(with: ["volume", "inspect"]) {
+            XCTAssertTrue(allowedExitCodes.contains(1))
+            return CommandResult(stdout: "", stderr: "not found", terminationStatus: 1)
+        }
+        guard arguments.starts(with: ["exec", "harness-postgres"]),
+              let sql = arguments.last
+        else {
+            XCTFail("Unexpected cleanup command: \(arguments)")
+            return CommandResult(stdout: "", stderr: "unexpected", terminationStatus: 1)
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
+        if sql.contains("SELECT s.slot_name") {
+            return CommandResult(
+                stdout: slotExists ? "electric_slot_instance1|harness_1|false\n" : "",
+                stderr: "",
+                terminationStatus: 0
+            )
+        }
+        if sql.contains("pg_drop_replication_slot") {
+            slotExists = false
+            return CommandResult(stdout: "", stderr: "", terminationStatus: 0)
+        }
+        if sql.contains("SELECT 1 FROM pg_database") {
+            return CommandResult(
+                stdout: databaseExists ? "1\n" : "",
+                stderr: "",
+                terminationStatus: 0
+            )
+        }
+        if sql.contains("DROP DATABASE IF EXISTS harness_1") {
+            databaseExists = false
+            return CommandResult(stdout: "", stderr: "", terminationStatus: 0)
+        }
+        XCTFail("Unexpected PostgreSQL command: \(sql)")
+        return CommandResult(stdout: "", stderr: "unexpected", terminationStatus: 1)
+    }
+}
+
+private final class OrphanCleanupProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var updates: [OrphanCleanupProgress] = []
+
+    func record(_ update: OrphanCleanupProgress) {
+        lock.lock()
+        updates.append(update)
+        lock.unlock()
+    }
+
+    func last() -> OrphanCleanupProgress? {
+        lock.lock()
+        defer { lock.unlock() }
+        return updates.last
+    }
+}
+
 final class NukeTests: XCTestCase {
     func testDockerMountParserAcceptsGoTemplateSpacing() {
         XCTAssertTrue(dockerMountOutput(
@@ -108,6 +183,55 @@ final class NukeTests: XCTestCase {
         XCTAssertTrue(query.contains("s.slot_name='electric_slot_instance1'"))
         XCTAssertFalse(query.contains("pg_database"))
         XCTAssertFalse(query.contains(".oid"))
+    }
+
+    func testOrphanCleanupRetrySkipsAbsentDockerAndRemovesRemainingPostgresTargets() async throws {
+        let commandFixture = OrphanCleanupRetryFixture()
+        let orphan = OrphanSnapshot(
+            id: "stale-docker-1",
+            kind: .staleDocker,
+            title: "Stale Docker resources for instance 1",
+            missingPath: nil,
+            instanceNumber: 1,
+            confidence: .high,
+            reasons: ["Previously observed per-instance resources."]
+        )
+        let snapshot = TownSnapshot(
+            repositoryPath: "/tmp/town",
+            worktrees: [],
+            orphans: [orphan],
+            sharedServices: [],
+            dormantStates: []
+        )
+        let control = TownControlEngine(
+            runCommand: { _, _, _, _ in
+                XCTFail("No process command should run for a storage-only retry.")
+                return CommandResult(stdout: "", stderr: "", terminationStatus: 1)
+            }
+        )
+        let registryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TownDockOrphanRetry-\(UUID().uuidString).json")
+        let engine = NukeEngine(
+            runCommand: commandFixture.run,
+            controlEngine: control,
+            registry: TownRegistry(fileURL: registryURL),
+            freshSnapshot: { _ in snapshot }
+        )
+        let manifest = await engine.orphanCleanupDryRun(snapshot: snapshot)
+        let progressRecorder = OrphanCleanupProgressRecorder()
+
+        let result = try await engine.executeOrphanCleanup(
+            manifest: manifest,
+            repositoryPath: snapshot.repositoryPath,
+            confirmationText: manifest.confirmationText,
+            progress: { update in progressRecorder.record(update) }
+        )
+
+        XCTAssertEqual(result.outcomes.count, 4)
+        XCTAssertEqual(result.outcomes.filter { $0.disposition == .alreadyAbsent }.count, 2)
+        XCTAssertEqual(result.outcomes.filter { $0.disposition == .removed }.count, 2)
+        XCTAssertEqual(progressRecorder.last()?.completedTargets, 4)
+        XCTAssertEqual(progressRecorder.last()?.totalTargets, 4)
     }
 
     func testPrimaryCheckoutCanNeverProduceExecutableManifest() async throws {

@@ -183,9 +183,10 @@ struct OrphanCleanupSheet: View {
 
     private var footer: some View {
         HStack {
-            Text("Permanent local deletion. No worktree or shared service is targeted.")
+            Text(footerStatus)
                 .font(.caption)
                 .foregroundStyle(TownTheme.muted)
+                .lineLimit(1)
             Spacer()
             Button("Cancel") {
                 store.dismissOrphanCleanup()
@@ -204,7 +205,11 @@ struct OrphanCleanupSheet: View {
                 if store.isExecutingOrphanCleanup {
                     HStack(spacing: 7) {
                         ProgressView().controlSize(.small)
-                        Text("Removing…")
+                        if let progress = store.orphanCleanupProgress {
+                            Text("\(progress.completedTargets) of \(progress.totalTargets)")
+                        } else {
+                            Text("Revalidating…")
+                        }
                     }
                 } else {
                     Text("Remove \(actionableTargets.count) Targets")
@@ -219,6 +224,16 @@ struct OrphanCleanupSheet: View {
             )
         }
         .padding(16)
+    }
+
+    private var footerStatus: String {
+        guard store.isExecutingOrphanCleanup else {
+            return "Permanent local deletion. No worktree or shared service is targeted."
+        }
+        guard let progress = store.orphanCleanupProgress else {
+            return "Revalidating the reviewed orphan manifest…"
+        }
+        return "Removing \(progress.currentTargetLabel)"
     }
 }
 

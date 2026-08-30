@@ -58,6 +58,7 @@ final class TownStore: ObservableObject {
     @Published private(set) var isPreparingOrphanCleanup = false
     @Published private(set) var isExecutingOrphanCleanup = false
     @Published private(set) var orphanCleanupError: String?
+    @Published private(set) var orphanCleanupProgress: OrphanCleanupProgress?
 
     let repositoryPath: String
 
@@ -406,6 +407,7 @@ final class TownStore: ObservableObject {
         guard !isExecutingOrphanCleanup else { return }
         isPreparingOrphanCleanup = true
         orphanCleanupError = nil
+        orphanCleanupProgress = nil
         orphanCleanupManifest = await nuker.orphanCleanupDryRun(snapshot: snapshot)
         isPreparingOrphanCleanup = false
     }
@@ -415,13 +417,19 @@ final class TownStore: ObservableObject {
         guard let manifest = orphanCleanupManifest else { return false }
         isExecutingOrphanCleanup = true
         orphanCleanupError = nil
+        orphanCleanupProgress = nil
         defer { isExecutingOrphanCleanup = false }
 
         do {
             let result = try await nuker.executeOrphanCleanup(
                 manifest: manifest,
                 repositoryPath: repositoryPath,
-                confirmationText: manifest.confirmationText
+                confirmationText: manifest.confirmationText,
+                progress: { [weak self] update in
+                    await MainActor.run {
+                        self?.orphanCleanupProgress = update
+                    }
+                }
             )
             let removed = result.outcomes.filter { $0.disposition == .removed }.count
             let absent = result.outcomes.filter { $0.disposition == .alreadyAbsent }.count
@@ -443,6 +451,7 @@ final class TownStore: ObservableObject {
         orphanCleanupPresented = false
         orphanCleanupManifest = nil
         orphanCleanupError = nil
+        orphanCleanupProgress = nil
         isPreparingOrphanCleanup = false
     }
 

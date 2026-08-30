@@ -481,6 +481,22 @@ public struct OrphanCleanupManifest: Codable, Hashable, Sendable {
     }
 }
 
+public struct OrphanCleanupProgress: Codable, Hashable, Sendable {
+    public let completedTargets: Int
+    public let totalTargets: Int
+    public let currentTargetLabel: String
+
+    public init(
+        completedTargets: Int,
+        totalTargets: Int,
+        currentTargetLabel: String
+    ) {
+        self.completedTargets = completedTargets
+        self.totalTargets = totalTargets
+        self.currentTargetLabel = currentTargetLabel
+    }
+}
+
 public struct OrphanCleanupResult: Codable, Hashable, Sendable {
     public let outcomes: [NukeTargetOutcome]
     public let completedAt: Date
