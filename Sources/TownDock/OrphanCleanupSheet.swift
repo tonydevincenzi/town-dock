@@ -89,7 +89,7 @@ struct OrphanCleanupSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(actionableTargets.count) verified targets")
                         .font(.headline)
-                    Text("Town Dock will rediscover everything and require this exact target set before the first change.")
+                    Text("Town Dock will revalidate every reviewed target before the first change. Newly discovered targets are never added silently.")
                         .font(.caption)
                         .foregroundStyle(TownTheme.muted)
                 }

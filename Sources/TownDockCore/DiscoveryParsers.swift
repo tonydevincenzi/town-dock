@@ -510,6 +510,7 @@ public struct DockerContainerRecord: Hashable, Sendable {
     public let state: String
     public let status: String
     public let publishedPorts: [Int]
+    public let mountedVolumes: [String]
     public let instanceNumber: Int?
     public let cpuPercent: Double?
     public let residentBytes: UInt64?
@@ -520,6 +521,7 @@ public struct DockerContainerRecord: Hashable, Sendable {
         state: String,
         status: String,
         publishedPorts: [Int],
+        mountedVolumes: [String] = [],
         instanceNumber: Int?,
         cpuPercent: Double? = nil,
         residentBytes: UInt64? = nil
@@ -529,6 +531,7 @@ public struct DockerContainerRecord: Hashable, Sendable {
         self.state = state
         self.status = status
         self.publishedPorts = publishedPorts
+        self.mountedVolumes = mountedVolumes
         self.instanceNumber = instanceNumber
         self.cpuPercent = cpuPercent
         self.residentBytes = residentBytes
@@ -564,6 +567,7 @@ public enum DockerInventoryParser {
                 state: safeName(string(object, keys: ["State"])),
                 status: SecretRedactor.redact(string(object, keys: ["Status"]), maximumLength: 512),
                 publishedPorts: publishedPorts(portsText),
+                mountedVolumes: mountedVolumeNames(string(object, keys: ["Mounts"])),
                 instanceNumber: instanceNumber(from: name)
             )
         }
@@ -615,6 +619,7 @@ public enum DockerInventoryParser {
                 state: container.state,
                 status: container.status,
                 publishedPorts: container.publishedPorts,
+                mountedVolumes: container.mountedVolumes,
                 instanceNumber: container.instanceNumber,
                 cpuPercent: stats?.0,
                 residentBytes: stats?.1
@@ -636,6 +641,13 @@ public enum DockerInventoryParser {
 
     private static func safeIdentifier(_ value: String) -> String {
         String(value.prefix(128)).filter { $0.isHexDigit || $0 == "-" || $0 == "_" }
+    }
+
+    private static func mountedVolumeNames(_ value: String) -> [String] {
+        value.split(separator: ",").compactMap { raw in
+            let name = safeName(String(raw).trimmingCharacters(in: .whitespacesAndNewlines))
+            return name.isEmpty || name.contains("?") ? nil : name
+        }
     }
 
     private static func percent(_ value: String) -> Double? {

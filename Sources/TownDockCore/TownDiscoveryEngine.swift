@@ -425,6 +425,7 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         let townTerms = [
             "local-convex", "local-stack", "stack-health", "--instance-name instance-",
             "harness-electric", "convex-local-backend", "scripts/dev", "next-server",
+            ".convex/local-backend-instance-",
         ]
         for process in processes {
             let lower = process.command.lowercased()
@@ -1085,6 +1086,16 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         }
 
         for state in stateDirectories where state.associatedWorktreePath == nil && !state.isRunning {
+            let stateProcesses = identities.values.filter { process in
+                guard !orphanedPIDs.contains(process.pid),
+                      !TownProcessClassifier.isSharedRuntimeHost(process.command),
+                      let cwd = process.workingDirectory
+                else {
+                    return false
+                }
+                return path(cwd, belongsTo: state.path)
+            }.sorted { $0.pid < $1.pid }
+            orphanedPIDs.formUnion(stateProcesses.map(\.pid))
             orphans.append(
                 OrphanSnapshot(
                     id: "dormant-state-\(stableID(state.path))",
@@ -1093,7 +1104,10 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                     missingPath: nil,
                     instanceNumber: state.instanceNumber,
                     confidence: .high,
-                    reasons: ["No active backend or registered worktree owns this state directory."],
+                    reasons: stateProcesses.isEmpty
+                        ? ["No active backend or registered worktree owns this state directory."]
+                        : ["Detached Convex executor processes still hold this unclaimed state directory."],
+                    processes: stateProcesses,
                     stateDirectory: state
                 )
             )
@@ -1105,10 +1119,13 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
             let stopped = container.state.lowercased() != "running"
             return townLike && stopped && container.instanceNumber.map { !claimed.contains($0) } != false
         }
+        let mountedVolumeNames = Set(docker.containers.flatMap(\.mountedVolumes))
         let staleVolumes = docker.volumes.filter { volume in
             let lower = volume.name.lowercased()
             let townLike = lower.contains("harness") || lower.contains("electric") || lower.contains("town")
-            return townLike && volume.instanceNumber.map { !claimed.contains($0) } != false
+            return townLike
+                && !mountedVolumeNames.contains(volume.name)
+                && volume.instanceNumber.map { !claimed.contains($0) } != false
         }
         let staleNumbers = Set(staleContainers.compactMap(\.instanceNumber) + staleVolumes.compactMap(\.instanceNumber))
         for number in staleNumbers.sorted() {

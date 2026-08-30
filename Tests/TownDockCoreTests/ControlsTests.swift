@@ -263,6 +263,65 @@ final class ControlsTests: XCTestCase {
         XCTAssertEqual(recorder.signalSnapshot().map(\.1), [SIGTERM, SIGKILL])
     }
 
+    func testOrphanKillStopsDetachedExecutorInsideDormantConvexState() async throws {
+        let recorder = ControlInvocationRecorder()
+        let statePath = "/Users/example/.convex/local-backend-instance-1-3220"
+        let process = ProcessIdentity(
+            pid: 12_241,
+            parentPID: 1,
+            processGroupID: 46_348,
+            startToken: "Thu_Aug_27_17:43:57_2026",
+            command: "node \(statePath)/tmp/.tmpdUOIr5/local.cjs",
+            workingDirectory: statePath
+        )
+        let state = StateDirectorySnapshot(
+            path: statePath,
+            instanceNumber: 1,
+            sizeBytes: 1,
+            modifiedAt: nil,
+            isRunning: false,
+            associatedWorktreePath: nil,
+            confidence: .ambiguous
+        )
+        let orphan = OrphanSnapshot(
+            id: "dormant-state-1",
+            kind: .dormantState,
+            title: "Dormant state for instance 1",
+            missingPath: nil,
+            instanceNumber: 1,
+            confidence: .high,
+            reasons: ["Detached executor holds the state directory."],
+            processes: [process],
+            stateDirectory: state
+        )
+        let engine = TownControlEngine(
+            runCommand: { tool, arguments, _, _ in
+                if tool == .ps {
+                    return CommandResult(
+                        stdout: "Thu Aug 27 17:43:57 2026 46348\n",
+                        stderr: "",
+                        terminationStatus: 0
+                    )
+                }
+                if arguments.contains("cwd") {
+                    return CommandResult(
+                        stdout: "p12241\nfcwd\nn\(statePath)\n",
+                        stderr: "",
+                        terminationStatus: 0
+                    )
+                }
+                return CommandResult(stdout: "", stderr: "", terminationStatus: 1)
+            },
+            sendSignal: { pid, signal in recorder.recordSignal(pid, signal) }
+        )
+
+        let result = try await engine.killOrphan(orphan)
+
+        XCTAssertEqual(result.affectedProcessIDs, [12_241])
+        XCTAssertEqual(recorder.signalSnapshot().map(\.0), [12_241, 12_241])
+        XCTAssertEqual(recorder.signalSnapshot().map(\.1), [SIGTERM, SIGKILL])
+    }
+
     func testAmbiguousOrphanIsRefusedWithoutSendingSignals() async throws {
         let recorder = ControlInvocationRecorder()
         let engine = TownControlEngine(

@@ -158,6 +158,31 @@ private final class OrphanCleanupProgressRecorder: @unchecked Sendable {
 }
 
 final class NukeTests: XCTestCase {
+    func testMakeTreeOwnerWritableHandlesReadOnlyConvexArtifacts() throws {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory
+            .appendingPathComponent("TownDockReadOnlyState-\(UUID().uuidString)")
+        let cache = root.appendingPathComponent("tmp/cache", isDirectory: true)
+        let artifact = cache.appendingPathComponent("metadata.json")
+        try fileManager.createDirectory(at: cache, withIntermediateDirectories: true)
+        XCTAssertTrue(fileManager.createFile(atPath: artifact.path, contents: Data("{}".utf8)))
+        try fileManager.setAttributes([.posixPermissions: 0o444], ofItemAtPath: artifact.path)
+        try fileManager.setAttributes([.posixPermissions: 0o555], ofItemAtPath: cache.path)
+
+        try makeTreeOwnerWritable(at: root)
+
+        let cacheMode = try XCTUnwrap(
+            fileManager.attributesOfItem(atPath: cache.path)[.posixPermissions] as? NSNumber
+        ).intValue
+        let artifactMode = try XCTUnwrap(
+            fileManager.attributesOfItem(atPath: artifact.path)[.posixPermissions] as? NSNumber
+        ).intValue
+        XCTAssertNotEqual(cacheMode & 0o300, 0)
+        XCTAssertNotEqual(artifactMode & 0o200, 0)
+        try fileManager.removeItem(at: root)
+        XCTAssertFalse(fileManager.fileExists(atPath: root.path))
+    }
+
     func testDockerMountParserAcceptsGoTemplateSpacing() {
         XCTAssertTrue(dockerMountOutput(
             "harness-electric-data-3 | /var/electric\n",
@@ -232,6 +257,66 @@ final class NukeTests: XCTestCase {
         XCTAssertEqual(result.outcomes.filter { $0.disposition == .removed }.count, 2)
         XCTAssertEqual(progressRecorder.last()?.completedTargets, 4)
         XCTAssertEqual(progressRecorder.last()?.totalTargets, 4)
+    }
+
+    func testOrphanCleanupIgnoresNewUnreviewedOrphansFoundDuringRevalidation() async throws {
+        let commandFixture = OrphanCleanupRetryFixture()
+        let reviewedOrphan = OrphanSnapshot(
+            id: "stale-docker-1",
+            kind: .staleDocker,
+            title: "Stale Docker resources for instance 1",
+            missingPath: nil,
+            instanceNumber: 1,
+            confidence: .high,
+            reasons: ["Previously observed per-instance resources."]
+        )
+        let newlyDiscoveredOrphan = OrphanSnapshot(
+            id: "stale-docker-2",
+            kind: .staleDocker,
+            title: "Stale Docker resources for instance 2",
+            missingPath: nil,
+            instanceNumber: 2,
+            confidence: .high,
+            reasons: ["Found after the review sheet opened."]
+        )
+        let reviewedSnapshot = TownSnapshot(
+            repositoryPath: "/tmp/town",
+            worktrees: [],
+            orphans: [reviewedOrphan],
+            sharedServices: [],
+            dormantStates: []
+        )
+        let freshSnapshot = TownSnapshot(
+            repositoryPath: "/tmp/town",
+            worktrees: [],
+            orphans: [reviewedOrphan, newlyDiscoveredOrphan],
+            sharedServices: [],
+            dormantStates: []
+        )
+        let control = TownControlEngine(
+            runCommand: { _, _, _, _ in
+                XCTFail("No process command should run for a storage-only cleanup.")
+                return CommandResult(stdout: "", stderr: "", terminationStatus: 1)
+            }
+        )
+        let registryURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TownDockOrphanSuperset-\(UUID().uuidString).json")
+        let engine = NukeEngine(
+            runCommand: commandFixture.run,
+            controlEngine: control,
+            registry: TownRegistry(fileURL: registryURL),
+            freshSnapshot: { _ in freshSnapshot }
+        )
+        let manifest = await engine.orphanCleanupDryRun(snapshot: reviewedSnapshot)
+
+        let result = try await engine.executeOrphanCleanup(
+            manifest: manifest,
+            repositoryPath: reviewedSnapshot.repositoryPath,
+            confirmationText: manifest.confirmationText
+        )
+
+        XCTAssertEqual(result.outcomes.count, 4)
+        XCTAssertTrue(result.outcomes.allSatisfy { !$0.targetID.contains("instance2") })
     }
 
     func testPrimaryCheckoutCanNeverProduceExecutableManifest() async throws {

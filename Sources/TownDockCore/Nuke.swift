@@ -664,7 +664,7 @@ public actor NukeEngine {
     }
 
     /// Executes a frozen bulk-orphan manifest only after a second full
-    /// discovery produces the exact same actionable target set.
+    /// discovery proves every reviewed target is still safely attributable.
     public func executeOrphanCleanup(
         manifest: OrphanCleanupManifest,
         repositoryPath: String,
@@ -682,13 +682,16 @@ public actor NukeEngine {
         let currentManifest = orphanCleanupDryRun(snapshot: fresh)
         let reviewedSignature = cleanupSignature(manifest.targets)
         let currentSignature = cleanupSignature(currentManifest.targets)
-        guard reviewedSignature == currentSignature else {
+        guard reviewedSignature.isSubset(of: currentSignature) else {
             throw TownDockError.staleSnapshot(
-                "Orphan ownership changed during review. Nothing was removed; generate a fresh manifest."
+                "A reviewed orphan is no longer safely attributable. Nothing was removed; generate a fresh manifest."
             )
         }
 
-        let selectedTargets = currentManifest.targets.filter(\.selectedByDefault)
+        // Discovery can find additional orphans while the review sheet is
+        // open. They were never reviewed, so ignore them instead of either
+        // failing the reviewed cleanup or silently expanding its scope.
+        let selectedTargets = manifest.targets.filter { $0.actionable && $0.selectedByDefault }
         let totalTargets = selectedTargets.count
         var completedTargets = 0
         var outcomes: [NukeTargetOutcome] = []
@@ -1256,6 +1259,7 @@ public actor NukeEngine {
         guard values.isDirectory == true, values.isSymbolicLink != true else {
             throw TownDockError.unsafeOperation("Refusing to recursively remove a symlink or non-directory.")
         }
+        try makeTreeOwnerWritable(at: url)
         try FileManager.default.removeItem(at: url)
         return removed(target, detail: "Removed orphan Convex SQLite, uploads, keys, and temporary state.")
     }
@@ -1377,6 +1381,7 @@ public actor NukeEngine {
         guard values.isDirectory == true, values.isSymbolicLink != true else {
             throw TownDockError.unsafeOperation("Refusing to recursively remove a symlink or non-directory.")
         }
+        try makeTreeOwnerWritable(at: url)
         try FileManager.default.removeItem(at: url)
         return removed(target, detail: "Removed Convex SQLite, uploads, keys, and temporary state.")
     }
@@ -1486,4 +1491,51 @@ public actor NukeEngine {
     private func canonicalPath(_ rawPath: String) -> String {
         URL(fileURLWithPath: rawPath).standardizedFileURL.resolvingSymlinksInPath().path
     }
+}
+
+/// Convex creates immutable-by-convention cache artifacts and read-only
+/// directories. Once a state root has passed the destructive ownership gates,
+/// add only the current owner's write/search bits so Foundation can remove the
+/// reviewed tree. Symlinks are never followed or modified.
+func makeTreeOwnerWritable(
+    at root: URL,
+    fileManager: FileManager = .default
+) throws {
+    func updatePermissions(at url: URL, isDirectory: Bool) throws {
+        let attributes = try fileManager.attributesOfItem(atPath: url.path)
+        guard let number = attributes[.posixPermissions] as? NSNumber else { return }
+        let current = number.intValue
+        let required = isDirectory ? 0o300 : 0o200
+        let updated = current | required
+        guard updated != current else { return }
+        try fileManager.setAttributes([.posixPermissions: updated], ofItemAtPath: url.path)
+    }
+
+    let rootValues = try root.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+    guard rootValues.isDirectory == true, rootValues.isSymbolicLink != true else {
+        throw TownDockError.unsafeOperation("Refusing to change permissions outside a real directory tree.")
+    }
+    try updatePermissions(at: root, isDirectory: true)
+
+    var traversalError: Error?
+    guard let enumerator = fileManager.enumerator(
+        at: root,
+        includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
+        options: [],
+        errorHandler: { _, error in
+            traversalError = error
+            return false
+        }
+    ) else {
+        throw TownDockError.commandFailed("Could not inspect the verified state directory before removal.")
+    }
+    for case let child as URL in enumerator {
+        let values = try child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        if values.isSymbolicLink == true {
+            enumerator.skipDescendants()
+            continue
+        }
+        try updatePermissions(at: child, isDirectory: values.isDirectory == true)
+    }
+    if let traversalError { throw traversalError }
 }

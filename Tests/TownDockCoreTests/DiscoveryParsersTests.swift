@@ -145,12 +145,13 @@ final class DiscoveryParsersTests: XCTestCase {
 
     func testDockerJSONLineParsersKeepOnlySafeInventoryFields() throws {
         let containers = DockerInventoryParser.parseContainers(
-            #"{"ID":"abcdef123456","Names":"harness-electric-13","State":"exited","Status":"Exited (1)","Ports":"0.0.0.0:3140->5133/tcp"}"#
+            #"{"ID":"abcdef123456","Names":"harness-electric-13","State":"exited","Status":"Exited (1)","Ports":"0.0.0.0:3140->5133/tcp","Mounts":"harness-electric-data-13,harness-cache-13"}"#
         )
         let container = try XCTUnwrap(containers.first)
         XCTAssertEqual(container.id, "abcdef123456")
         XCTAssertEqual(container.instanceNumber, 13)
         XCTAssertEqual(container.publishedPorts, [3_140])
+        XCTAssertEqual(container.mountedVolumes, ["harness-electric-data-13", "harness-cache-13"])
 
         let withStats = DockerInventoryParser.addingStats(
             #"{"Name":"harness-electric-13","CPUPerc":"4.25%","MemUsage":"321.2MiB / 7.748GiB"}"#,

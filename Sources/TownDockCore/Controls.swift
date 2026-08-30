@@ -207,12 +207,27 @@ public actor TownControlEngine {
         let listenerGroups = Set(orphan.processes.compactMap { process in
             listenerPIDs.contains(process.pid) ? process.processGroupID : nil
         })
+        let dormantStateRoot: String? = {
+            guard orphan.kind == .dormantState,
+                  let state = orphan.stateDirectory,
+                  let descriptor = TownStateDirectoryParser.parse(path: state.path),
+                  descriptor.instanceNumber == orphan.instanceNumber
+            else {
+                return nil
+            }
+            return state.path
+        }()
+        let ownsDormantState: (ProcessIdentity) -> Bool = { process in
+            guard let dormantStateRoot, let cwd = process.workingDirectory else { return false }
+            return self.path(cwd, isInside: dormantStateRoot)
+        }
         let candidates = orphan.processes.filter { process in
             !sharedPIDs.contains(process.pid)
                 && !TownProcessClassifier.isSharedRuntimeHost(process.command)
                 && (orphan.missingPath != nil
                     || listenerPIDs.contains(process.pid)
-                    || listenerGroups.contains(process.processGroupID))
+                    || listenerGroups.contains(process.processGroupID)
+                    || ownsDormantState(process))
         }
         guard !candidates.isEmpty else {
             return ControlResult(
@@ -225,14 +240,17 @@ public actor TownControlEngine {
         for process in candidates {
             if orphan.missingPath == nil,
                !listenerPIDs.contains(process.pid),
-               !listenerGroups.contains(process.processGroupID) {
+               !listenerGroups.contains(process.processGroupID),
+               !ownsDormantState(process) {
                 continue
             }
             // A deleted-worktree orphan can include a launcher rooted in the
             // vanished checkout and backends rooted in their owned state
             // directory. Pin every PID to its own freshly observed cwd instead
             // of forcing the whole process tree under the missing checkout.
-            let ownershipRoot = process.workingDirectory ?? orphan.missingPath
+            let ownershipRoot = ownsDormantState(process)
+                ? dormantStateRoot
+                : (process.workingDirectory ?? orphan.missingPath)
             guard let ownershipRoot else {
                 throw TownDockError.unsafeOperation(
                     "Refusing an orphan process without a verifiable working directory."
@@ -257,7 +275,10 @@ public actor TownControlEngine {
 
         var affected = Set(launchers.map(\.pid))
         for process in verified {
-            guard let ownershipRoot = process.workingDirectory ?? orphan.missingPath else {
+            let ownershipRoot = ownsDormantState(process)
+                ? dormantStateRoot
+                : (process.workingDirectory ?? orphan.missingPath)
+            guard let ownershipRoot else {
                 continue
             }
             guard try processStillMatches(process, ownedByAny: [ownershipRoot]) else { continue }
