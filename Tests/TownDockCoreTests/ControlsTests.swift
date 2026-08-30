@@ -258,7 +258,7 @@ final class ControlsTests: XCTestCase {
         let result = try await engine.killOrphan(orphan)
 
         XCTAssertEqual(result.affectedProcessIDs, [4_242])
-        XCTAssertEqual(recorder.signalSnapshot().map(\.0), [4_242])
+        XCTAssertEqual(recorder.signalSnapshot().map(\.0), [4_242, 4_242])
         XCTAssertEqual(recorder.signalSnapshot().map(\.1), [SIGTERM, SIGKILL])
     }
 
