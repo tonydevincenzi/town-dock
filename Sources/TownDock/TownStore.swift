@@ -471,13 +471,15 @@ final class TownStore: ObservableObject {
         }
 
         let configuration = NSWorkspace.OpenConfiguration()
-        NSWorkspace.shared.open(
-            [url],
-            withApplicationAt: chromeURL,
-            configuration: configuration
-        ) { _, error in
-            if let error {
-                Task { @MainActor in self.lastError = error.localizedDescription }
+        Task {
+            do {
+                _ = try await NSWorkspace.shared.open(
+                    [url],
+                    withApplicationAt: chromeURL,
+                    configuration: configuration
+                )
+            } catch {
+                lastError = error.localizedDescription
             }
         }
     }
@@ -681,13 +683,15 @@ final class TownStore: ObservableObject {
         let folderURL = URL(fileURLWithPath: path, isDirectory: true)
         let configuration = NSWorkspace.OpenConfiguration()
 
-        NSWorkspace.shared.open(
-            [folderURL],
-            withApplicationAt: terminalURL,
-            configuration: configuration
-        ) { _, error in
-            if let error {
-                Task { @MainActor in self.lastError = error.localizedDescription }
+        Task {
+            do {
+                _ = try await NSWorkspace.shared.open(
+                    [folderURL],
+                    withApplicationAt: terminalURL,
+                    configuration: configuration
+                )
+            } catch {
+                lastError = error.localizedDescription
             }
         }
     }
