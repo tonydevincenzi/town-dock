@@ -574,11 +574,14 @@ public actor NukeEngine {
             } ?? true
             let isOwned = orphan.confidence.rank >= AttributionConfidence.high.rank
                 && instanceIsUnclaimed
-            if !orphan.processes.isEmpty {
+            let killableProcesses = orphan.processes.filter {
+                !TownProcessClassifier.isSharedRuntimeHost($0.command)
+            }
+            if !killableProcesses.isEmpty {
                 let target = DestructiveTarget(
                     id: "orphan-processes:\(orphan.id)",
                     kind: .processGroup,
-                    label: "\(orphan.processes.count) processes — \(orphan.title)",
+                    label: "\(killableProcesses.count) processes — \(orphan.title)",
                     identifier: orphan.id,
                     confidence: isOwned ? orphan.confidence : .ambiguous,
                     selectedByDefault: isOwned,

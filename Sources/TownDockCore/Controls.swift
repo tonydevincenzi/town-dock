@@ -209,6 +209,7 @@ public actor TownControlEngine {
         })
         let candidates = orphan.processes.filter { process in
             !sharedPIDs.contains(process.pid)
+                && !TownProcessClassifier.isSharedRuntimeHost(process.command)
                 && (orphan.missingPath != nil
                     || listenerPIDs.contains(process.pid)
                     || listenerGroups.contains(process.processGroupID))

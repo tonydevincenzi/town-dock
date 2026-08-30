@@ -1144,8 +1144,15 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         identities: [Int32: ProcessIdentity]
     ) -> [ProcessIdentity] {
         let repositoryName = URL(fileURLWithPath: repositoryPath).lastPathComponent
-        var selected = listenerPIDs
-        for (pid, process) in processByPID where command(process.command, hasInstance: instance) {
+        var selected = Set(listenerPIDs.filter { pid in
+            processByPID[pid].map {
+                !TownProcessClassifier.isSharedRuntimeHost($0.command)
+            } == true
+        })
+        for (pid, process) in processByPID
+            where command(process.command, hasInstance: instance)
+                && !TownProcessClassifier.isSharedRuntimeHost(process.command)
+        {
             selected.insert(pid)
         }
 
@@ -1180,7 +1187,10 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         let children = Dictionary(grouping: processByPID.values, by: \.parentPID)
         var queue = Array(selected)
         while let pid = queue.popLast(), selected.count < 512 {
-            for child in children[pid, default: []] where selected.insert(child.pid).inserted {
+            for child in children[pid, default: []]
+                where !TownProcessClassifier.isSharedRuntimeHost(child.command)
+                    && selected.insert(child.pid).inserted
+            {
                 queue.append(child.pid)
             }
         }
@@ -1197,15 +1207,20 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                         || evidence?.openPaths.contains(where: { path($0, belongsTo: root) }) == true
                         || process.command.contains(root)
                 }
-                let townShaped = townTerms.contains { process.command.lowercased().contains($0) }
-                    || command(process.command, hasInstance: instance)
-                guard belongsToMissingRoot || townShaped else { break }
+                let townShaped = !TownProcessClassifier.isSharedRuntimeHost(process.command)
+                    && (townTerms.contains { process.command.lowercased().contains($0) }
+                        || command(process.command, hasInstance: instance))
+                guard !TownProcessClassifier.isSharedRuntimeHost(process.command),
+                      belongsToMissingRoot || townShaped
+                else { break }
                 selected.insert(pid)
                 cursor = process.parentPID
                 depth += 1
             }
         }
-        return selected.compactMap { identities[$0] }.sorted { $0.pid < $1.pid }
+        return selected.compactMap { identities[$0] }
+            .filter { !TownProcessClassifier.isSharedRuntimeHost($0.command) }
+            .sorted { $0.pid < $1.pid }
     }
 
     private struct ServicesMarker {

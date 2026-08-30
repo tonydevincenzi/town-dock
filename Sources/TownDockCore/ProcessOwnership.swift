@@ -4,6 +4,16 @@ import Foundation
 /// A matching command is never sufficient on its own: callers must also verify
 /// the process identity and an owned working directory or listener.
 enum TownProcessClassifier {
+    /// Docker Desktop owns host-side listener sockets for container-published
+    /// ports. It is shared infrastructure, never an instance process, and must
+    /// not become killable merely because an orphaned Electric port maps to it.
+    static func isSharedRuntimeHost(_ command: String) -> Bool {
+        let lower = command.lowercased()
+        return lower.contains("/docker.app/contents/macos/com.docker.backend")
+            || lower.hasPrefix("com.docker.backend ")
+            || lower == "com.docker.backend"
+    }
+
     static func isLifecycleLauncher(_ command: String) -> Bool {
         let lower = command.lowercased()
         return lower.contains("run local-stack")

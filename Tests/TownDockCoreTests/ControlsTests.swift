@@ -38,6 +38,16 @@ private final class ControlInvocationRecorder: @unchecked Sendable {
 }
 
 final class ControlsTests: XCTestCase {
+    func testDockerDesktopBackendIsAlwaysClassifiedAsSharedRuntimeHost() {
+        XCTAssertTrue(TownProcessClassifier.isSharedRuntimeHost(
+            "/Applications/Docker.app/Contents/MacOS/com.docker.backend services"
+        ))
+        XCTAssertTrue(TownProcessClassifier.isSharedRuntimeHost("com.docker.backend services"))
+        XCTAssertFalse(TownProcessClassifier.isSharedRuntimeHost(
+            "convex-local-backend --instance-name instance-5"
+        ))
+    }
+
     func testOwnershipAnchorsExcludeUnrelatedProcessInSameCheckout() {
         let launcher = ProcessIdentity(
             pid: 100,

@@ -405,6 +405,49 @@ final class NukeTests: XCTestCase {
         )
     }
 
+    func testOrphanCleanupDoesNotTargetDockerDesktopHostBridge() async throws {
+        let fixture = try NukeCommandFixture()
+        defer { fixture.cleanup() }
+        let dockerBackend = ProcessIdentity(
+            pid: 35_633,
+            parentPID: 35_632,
+            processGroupID: 35_633,
+            startToken: "token",
+            command: "/Applications/Docker.app/Contents/MacOS/com.docker.backend services",
+            workingDirectory: "/Users/example/Library/Containers/com.docker.docker/Data"
+        )
+        let orphan = OrphanSnapshot(
+            id: "unclaimed-instance-8",
+            kind: .unclaimedInstance,
+            title: "Unclaimed Town instance 8",
+            missingPath: nil,
+            instanceNumber: 8,
+            confidence: .high,
+            reasons: ["Electric is published through Docker Desktop."],
+            processes: [dockerBackend],
+            services: [ServiceSnapshot(
+                kind: .electric,
+                port: 3_170,
+                state: .running,
+                processIDs: [dockerBackend.pid]
+            )]
+        )
+        let snapshot = TownSnapshot(
+            repositoryPath: fixture.repository.path,
+            worktrees: [makeWorktree(path: fixture.repository.path, isPrimary: true)],
+            orphans: [orphan],
+            sharedServices: [],
+            dormantStates: []
+        )
+
+        let manifest = await makeEngine(fixture).orphanCleanupDryRun(snapshot: snapshot)
+
+        XCTAssertFalse(manifest.targets.contains { $0.kind == .processGroup })
+        XCTAssertTrue(manifest.targets.contains {
+            $0.kind == .dockerContainer && $0.identifier == "harness-electric-8"
+        })
+    }
+
     private func makeEngine(
         _ fixture: NukeCommandFixture,
         freshSnapshot: @escaping FreshSnapshotProvider = { _ in
