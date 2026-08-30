@@ -18,12 +18,12 @@ struct ServiceChip: View {
                 Text(":\(service.port)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                if let resourceSummary = service.resourceSummary {
-                    Text(resourceSummary)
-                        .font(.caption2.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                Text(service.resourceSummary ?? " ")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .opacity(service.resourceSummary == nil ? 0 : 1)
+                    .accessibilityHidden(service.resourceSummary == nil)
             }
 
             Spacer(minLength: 3)
