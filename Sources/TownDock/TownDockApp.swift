@@ -15,7 +15,7 @@ struct TownDockApp: App {
 }
 
 @MainActor
-final class TownDockAppDelegate: NSObject, NSApplicationDelegate {
+final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let store = TownStore.shared
     private let statusItem = NSStatusBar.system.statusItem(
         withLength: NSStatusItem.variableLength
@@ -52,6 +52,20 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate {
         _ sender: NSApplication
     ) -> Bool {
         false
+    }
+
+    func applicationShouldHandleReopen(
+        _ sender: NSApplication,
+        hasVisibleWindows flag: Bool
+    ) -> Bool {
+        showDashboard()
+        return true
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === dashboardWindow else { return true }
+        sender.orderOut(nil)
+        return false
     }
 
     private func configureStatusItem() {
@@ -131,6 +145,7 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate {
             window.title = "Town Dock"
             window.minSize = NSSize(width: 920, height: 620)
             window.isReleasedWhenClosed = false
+            window.delegate = self
             window.appearance = NSAppearance(named: .darkAqua)
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
@@ -144,7 +159,7 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate {
             )
             dashboardWindow = window
         }
-        dashboardWindow?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        dashboardWindow?.makeKeyAndOrderFront(nil)
     }
 }
