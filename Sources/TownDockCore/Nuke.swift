@@ -63,6 +63,14 @@ func dockerMountOutput(
     }
 }
 
+/// `pg_replication_slots.database` is already a database name. Joining it to
+/// `pg_database.oid` produces an `oid = name` error on supported PostgreSQL
+/// versions, so read and verify the name directly from the slot record.
+func replicationSlotLookupSQL(named slotName: String) -> String {
+    "SELECT s.slot_name || '|' || s.database || '|' || s.active "
+        + "FROM pg_replication_slots s WHERE s.slot_name='\(slotName)'"
+}
+
 /// Builds and executes a frozen, reviewable worktree deletion manifest.
 ///
 /// `execute` is intentionally strict: the exact confirmation string, branch
@@ -1234,7 +1242,7 @@ public actor NukeEngine {
         try requireIdentifier(target.identifier, prefix: "electric_slot_instance", suffixRange: 1...9)
         let number = try numericSuffix(target.identifier, prefix: "electric_slot_instance")
         let expectedDatabase = "harness_\(number)"
-        let query = "SELECT s.slot_name || '|' || d.datname || '|' || s.active FROM pg_replication_slots s JOIN pg_database d ON d.oid=s.database WHERE s.slot_name='\(target.identifier)'"
+        let query = replicationSlotLookupSQL(named: target.identifier)
         let record = try dockerPostgres(query).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !record.isEmpty else { return absent(target) }
         guard record == "\(target.identifier)|\(expectedDatabase)|f" else {

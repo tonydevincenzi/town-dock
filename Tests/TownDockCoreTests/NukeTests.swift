@@ -101,6 +101,15 @@ final class NukeTests: XCTestCase {
         ))
     }
 
+    func testReplicationSlotLookupUsesDatabaseNameWithoutOIDJoin() {
+        let query = replicationSlotLookupSQL(named: "electric_slot_instance1")
+
+        XCTAssertTrue(query.contains("s.database"))
+        XCTAssertTrue(query.contains("s.slot_name='electric_slot_instance1'"))
+        XCTAssertFalse(query.contains("pg_database"))
+        XCTAssertFalse(query.contains(".oid"))
+    }
+
     func testPrimaryCheckoutCanNeverProduceExecutableManifest() async throws {
         let fixture = try NukeCommandFixture(primaryOnly: true)
         defer { fixture.cleanup() }
