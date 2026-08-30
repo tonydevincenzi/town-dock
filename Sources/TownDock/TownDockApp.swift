@@ -37,7 +37,7 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(.regular)
         configureStatusItem()
         configurePopover()
         updateStatusItem()
