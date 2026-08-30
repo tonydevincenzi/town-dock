@@ -30,6 +30,10 @@ struct DashboardView: View {
             NukeSheet(worktree: worktree)
                 .environmentObject(store)
         }
+        .sheet(isPresented: $store.bulkNukePresented) {
+            BulkNukeSheet()
+                .environmentObject(store)
+        }
         .sheet(isPresented: $store.orphanCleanupPresented) {
             OrphanCleanupSheet()
                 .environmentObject(store)
@@ -59,6 +63,7 @@ struct DashboardView: View {
                     state: store.runningWorktreeCount > 0 ? .running : .stopped,
                     size: 7
                 )
+                .townTooltip("\(store.runningWorktreeCount) of \(store.snapshot.worktrees.count) worktrees running")
             }
             .padding(.horizontal, 13)
             .padding(.top, 13)
@@ -86,6 +91,7 @@ struct DashboardView: View {
                     .foregroundStyle(TownTheme.muted)
                     .lineLimit(2)
                     .truncationMode(.middle)
+                    .townTooltip("Town repository being monitored: \(store.repositoryPath)")
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
@@ -141,6 +147,7 @@ struct DashboardView: View {
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 7)
+        .townTooltip(section.helpText(count: count))
     }
 
     @ViewBuilder
@@ -168,7 +175,6 @@ struct DashboardView: View {
                     systemImage: "sidebar.left"
                 )
             }
-            .help(isSidebarVisible ? "Hide sidebar" : "Show sidebar")
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
@@ -180,7 +186,7 @@ struct DashboardView: View {
             Text("Updated \(store.snapshot.generatedAt.relativeLabel)")
                 .font(.caption)
                 .foregroundStyle(TownTheme.muted)
-                .help("Last refreshed \(store.snapshot.generatedAt.formatted())")
+                .townTooltip("Last refreshed \(store.snapshot.generatedAt.formatted())")
 
             Button {
                 Task { await store.refresh() }
@@ -233,6 +239,15 @@ private enum DashboardSection: String, Hashable {
         case .storage: "externaldrive"
         }
     }
+
+    func helpText(count: Int) -> String {
+        switch self {
+        case .worktrees: "Show all \(count) detected Town worktrees and their running services."
+        case .orphans: "Show \(count) processes or resources that are not owned by a current worktree."
+        case .infrastructure: "Show \(count) shared services used across Town instances."
+        case .storage: "Show \(count) local state directories not used by a running stack."
+        }
+    }
 }
 
 private struct WorktreesDashboard: View {
@@ -241,12 +256,23 @@ private struct WorktreesDashboard: View {
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 12) {
-                SectionHeader(
-                    "Town worktrees",
-                    subtitle: "Live services, Git state, and controls for every checkout",
-                    symbol: "arrow.triangle.branch",
-                    count: store.snapshot.worktrees.count
-                )
+                HStack(alignment: .center, spacing: 12) {
+                    SectionHeader(
+                        "Town worktrees",
+                        subtitle: "Live services, Git state, and controls for every checkout",
+                        symbol: "arrow.triangle.branch",
+                        count: store.snapshot.worktrees.count
+                    )
+
+                    Button(role: .destructive) {
+                        store.requestBulkNuke()
+                    } label: {
+                        Label("Bulk Nuke…", systemImage: "trash.slash")
+                    }
+                    .buttonStyle(LinearButtonStyle(destructive: true))
+                    .disabled(store.snapshot.worktrees.allSatisfy(\.isPrimary))
+                    .townTooltip("Select and permanently remove multiple non-primary worktrees.")
+                }
                 .padding(.bottom, 4)
 
                 ForEach(sortedWorktrees) { worktree in
@@ -375,11 +401,14 @@ private struct OrphanCard: View {
                             .font(.headline)
                         HStack(spacing: 10) {
                             Text(orphan.kind.rawValue.splitCamelCase.capitalized)
+                                .townTooltip(orphan.kind.helpText)
                             if let instance = orphan.instanceNumber {
                                 Text("Instance \(instance)")
+                                    .townTooltip("Town instance number inferred for this orphaned resource.")
                             }
                             Text(orphan.confidence.rawValue.capitalized)
                                 .foregroundStyle(orphan.confidence.tint)
+                                .townTooltip(orphan.confidence.helpText)
                         }
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -395,7 +424,7 @@ private struct OrphanCard: View {
                         .buttonStyle(LinearButtonStyle(destructive: true))
                         .controlSize(.small)
                         .disabled(store.isOperating(on: orphan.id) || !canKill)
-                        .help(
+                        .townTooltip(
                             canKill
                                 ? "Kill the verified orphan process tree"
                                 : "Town Dock will not kill processes with ambiguous ownership"
@@ -408,6 +437,7 @@ private struct OrphanCard: View {
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
+                        .townTooltip("The worktree path this resource previously belonged to; it no longer exists.")
                 }
 
                 ForEach(orphan.reasons, id: \.self) { reason in
@@ -433,6 +463,7 @@ private struct OrphanCard: View {
                         Text("\(orphan.processes.count) attributed processes")
                     }
                     .font(.caption.weight(.medium))
+                    .townTooltip("Processes Town Dock attributes to this orphan using working-directory and process-tree evidence.")
                 }
             }
         }
@@ -465,6 +496,7 @@ struct ProcessRow: View {
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .frame(width: 52, alignment: .trailing)
+                .townTooltip("Process ID (PID)")
             VStack(alignment: .leading, spacing: 2) {
                 Text(processName)
                     .font(.caption.monospaced())
@@ -482,12 +514,13 @@ struct ProcessRow: View {
                 Text(cpuPercent.cpuPercentLabel)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
-                    .help("CPU usage")
+                    .townTooltip("CPU usage")
             }
             if process.residentBytes > 0 {
                 Text(process.residentBytes.byteCountLabel)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .townTooltip("Resident memory currently held by this process")
             }
         }
         .padding(.vertical, 6)
@@ -585,6 +618,7 @@ private struct DormantStateRow: View {
                         Text(state.confidence.rawValue.capitalized)
                             .font(.caption.weight(.medium))
                             .foregroundStyle(state.confidence.tint)
+                            .townTooltip(state.confidence.helpText)
                     }
                     Text(state.path)
                         .font(.caption.monospaced())
@@ -602,10 +636,12 @@ private struct DormantStateRow: View {
                 VStack(alignment: .trailing, spacing: 5) {
                     Text(state.sizeBytes.byteCountLabel)
                         .font(.headline.monospacedDigit())
+                        .townTooltip("Disk space used by this dormant state directory")
                     if let modifiedAt = state.modifiedAt {
                         Text(modifiedAt.relativeLabel)
                             .font(.caption)
                             .foregroundStyle(.secondary)
+                            .townTooltip("Last modified \(modifiedAt.formatted())")
                     }
                 }
                 Button {
@@ -613,7 +649,7 @@ private struct DormantStateRow: View {
                 } label: {
                     Image(systemName: "folder")
                 }
-                .help("Reveal in Finder")
+                .townTooltip("Reveal in Finder")
             }
         }
     }
@@ -652,6 +688,7 @@ private struct NotificationBanner: View {
                     Image(systemName: "xmark")
                 }
                 .buttonStyle(.plain)
+                .townTooltip("Dismiss notification")
             }
         }
         .padding(.horizontal, 13)

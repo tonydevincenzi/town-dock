@@ -36,7 +36,6 @@ struct ServiceChip: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.secondary)
-                .help("Open \(url.absoluteString) in Chrome")
             }
         }
         .padding(.horizontal, compact ? 9 : 10)
@@ -63,13 +62,16 @@ struct ServiceChip: View {
                 Text("PID \(service.processIDs.map(String.init).joined(separator: ", "))")
             }
         }
-        .help(helpText)
+        .townTooltip(helpText)
     }
 
     private var helpText: String {
         let serviceDescription = service.detail ?? "\(service.kind.displayName) on port \(service.port)"
-        guard let resourceSummary = service.resourceSummary else { return serviceDescription }
-        return "\(serviceDescription)\n\(resourceSummary)"
+        var lines = ["\(service.state.displayName): \(serviceDescription)", service.state.helpText]
+        if let resourceSummary = service.resourceSummary {
+            lines.append(resourceSummary)
+        }
+        return lines.joined(separator: "\n")
     }
 }
 

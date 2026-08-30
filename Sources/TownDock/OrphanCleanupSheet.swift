@@ -218,6 +218,7 @@ struct OrphanCleanupSheet: View {
                 }
             }
             .keyboardShortcut(.defaultAction)
+            .townTooltip("Permanently remove every verified target shown in this cleanup manifest.")
             .disabled(
                 store.isExecutingOrphanCleanup
                     || !confirmationMatches
@@ -269,6 +270,15 @@ private struct OrphanCleanupTargetRow: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 10)
-        .help(target.note ?? target.label)
+        .townTooltip(
+            [
+                target.actionable
+                    ? "Verified target that will be permanently removed after confirmation."
+                    : "Excluded because Town Dock cannot safely prove ownership.",
+                target.note,
+            ]
+            .compactMap { $0 }
+            .joined(separator: " ")
+        )
     }
 }

@@ -3,6 +3,15 @@ import Combine
 import Foundation
 import TownDockCore
 
+struct BulkNukeReview: Identifiable, Hashable {
+    let worktree: WorktreeSnapshot
+    let manifest: NukeManifest?
+    let error: String?
+
+    var id: String { worktree.id }
+    var canExecute: Bool { manifest?.canExecute == true && error == nil }
+}
+
 @MainActor
 final class TownStore: ObservableObject {
     static let shared = TownStore()
@@ -19,6 +28,13 @@ final class TownStore: ObservableObject {
     @Published private(set) var isExecutingNuke = false
     @Published private(set) var nukeError: String?
 
+    @Published var bulkNukePresented = false
+    @Published private(set) var bulkNukeReviews: [BulkNukeReview] = []
+    @Published private(set) var isPreparingBulkNuke = false
+    @Published private(set) var isExecutingBulkNuke = false
+    @Published private(set) var bulkNukeError: String?
+    @Published private(set) var bulkNukeProgress: String?
+
     @Published var orphanCleanupPresented = false
     @Published private(set) var orphanCleanupManifest: OrphanCleanupManifest?
     @Published private(set) var isPreparingOrphanCleanup = false
@@ -33,6 +49,8 @@ final class TownStore: ObservableObject {
     private let registry: TownRegistry
     private var pollingTask: Task<Void, Never>?
     private var nukePreparationToken = UUID()
+    private var bulkNukePreparationToken = UUID()
+    private var bulkNukeDeletesLocalBranches = false
 
     init(repositoryPath: String = TownStore.defaultRepositoryPath) {
         self.repositoryPath = repositoryPath
@@ -219,6 +237,120 @@ final class TownStore: ObservableObject {
         nukeManifest = nil
         isPreparingNuke = false
         nukeError = nil
+    }
+
+    func requestBulkNuke() {
+        bulkNukePresented = true
+        bulkNukeReviews = []
+        bulkNukeError = nil
+        bulkNukeProgress = nil
+    }
+
+    func prepareBulkNuke(
+        worktrees: [WorktreeSnapshot],
+        deleteLocalBranches: Bool
+    ) async {
+        guard !isExecutingBulkNuke else { return }
+        let candidates = worktrees.filter { !$0.isPrimary }
+        let token = UUID()
+        bulkNukePreparationToken = token
+        bulkNukeDeletesLocalBranches = deleteLocalBranches
+        isPreparingBulkNuke = true
+        bulkNukeReviews = []
+        bulkNukeError = nil
+        bulkNukeProgress = nil
+
+        var reviews: [BulkNukeReview] = []
+        for worktree in candidates {
+            guard bulkNukePreparationToken == token else { return }
+            do {
+                let manifest = try await nuker.dryRun(
+                    worktree: worktree,
+                    repositoryPath: repositoryPath,
+                    deleteLocalBranch: deleteLocalBranches
+                )
+                reviews.append(BulkNukeReview(worktree: worktree, manifest: manifest, error: nil))
+            } catch {
+                reviews.append(BulkNukeReview(
+                    worktree: worktree,
+                    manifest: nil,
+                    error: error.localizedDescription
+                ))
+            }
+        }
+
+        guard bulkNukePreparationToken == token else { return }
+        bulkNukeReviews = reviews
+        isPreparingBulkNuke = false
+    }
+
+    @discardableResult
+    func executeBulkNuke(
+        confirmationText: String,
+        deleteLocalBranches: Bool
+    ) async -> Bool {
+        let manifests = bulkNukeReviews.compactMap { review in
+            review.canExecute ? review.manifest : nil
+        }
+        guard !manifests.isEmpty else {
+            bulkNukeError = "No selected worktree has a safe, executable deletion manifest."
+            return false
+        }
+        let expected = manifests.count == 1
+            ? "NUKE 1 WORKTREE"
+            : "NUKE \(manifests.count) WORKTREES"
+        guard confirmationText == expected else {
+            bulkNukeError = "The confirmation text does not match exactly."
+            return false
+        }
+        guard deleteLocalBranches == bulkNukeDeletesLocalBranches else {
+            bulkNukeError = "The branch deletion setting changed. Review a fresh manifest before deleting."
+            return false
+        }
+
+        isExecutingBulkNuke = true
+        bulkNukeError = nil
+        defer { isExecutingBulkNuke = false }
+
+        var completed = 0
+        var removedTargets = 0
+        do {
+            for manifest in manifests {
+                bulkNukeProgress = "Deleting \(manifest.worktree.displayName) · \(completed + 1) of \(manifests.count)"
+                let result = try await nuker.execute(
+                    manifest: manifest,
+                    repositoryPath: repositoryPath,
+                    confirmationText: manifest.confirmationText,
+                    deleteLocalBranch: deleteLocalBranches
+                )
+                completed += 1
+                removedTargets += result.outcomes.filter { $0.disposition == .removed }.count
+            }
+
+            activityMessage = "Nuked \(completed) worktree\(completed == 1 ? "" : "s") and removed \(removedTargets) verified targets."
+            bulkNukePresented = false
+            bulkNukeReviews = []
+            bulkNukeProgress = nil
+            await refresh()
+            return true
+        } catch {
+            bulkNukeProgress = nil
+            bulkNukeError = completed == 0
+                ? error.localizedDescription
+                : "Deleted \(completed) of \(manifests.count) worktrees, then stopped safely: \(error.localizedDescription)"
+            await refresh()
+            return false
+        }
+    }
+
+    func dismissBulkNuke() {
+        guard !isExecutingBulkNuke else { return }
+        bulkNukePreparationToken = UUID()
+        bulkNukePresented = false
+        bulkNukeReviews = []
+        isPreparingBulkNuke = false
+        bulkNukeError = nil
+        bulkNukeProgress = nil
     }
 
     func requestOrphanCleanup() {

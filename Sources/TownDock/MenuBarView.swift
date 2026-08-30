@@ -104,7 +104,7 @@ struct MenuBarView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.plain)
-            .help("Refresh")
+            .townTooltip("Refresh")
             .disabled(store.isRefreshing)
         }
     }
@@ -123,7 +123,7 @@ struct MenuBarView: View {
                     updatesEnabled ? "Check for Updates…" : "Update status…",
                     action: checkForUpdatesAction
                 )
-                .help(updatesEnabled ? "Check for a newer Town Dock release" : "Show why updates are unavailable")
+                .townTooltip(updatesEnabled ? "Check for a newer Town Dock release" : "Show why updates are unavailable")
                 Spacer()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")
@@ -154,6 +154,7 @@ private struct MenuBarWorktreeRow: View {
     var body: some View {
         HStack(spacing: 10) {
             StatusDot(state: state, size: 8)
+                .townTooltip(state.helpText)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {
                     Text(worktree.displayName)
@@ -163,6 +164,7 @@ private struct MenuBarWorktreeRow: View {
                         Text("N=\(number)")
                             .font(.caption2.monospacedDigit())
                             .foregroundStyle(.secondary)
+                            .townTooltip("Town instance \(number), which determines this worktree's ports and local storage.")
                     }
                 }
                 Text(isRunning ? serviceSummary : "Stopped")
@@ -177,7 +179,7 @@ private struct MenuBarWorktreeRow: View {
                     Image(systemName: "arrow.up.right.square")
                 }
                 .buttonStyle(.plain)
-                .help("Open frontend in Chrome")
+                .townTooltip("Open frontend in Chrome")
             }
 
             Menu {
@@ -199,6 +201,7 @@ private struct MenuBarWorktreeRow: View {
             .tint(TownTheme.muted)
             .fixedSize()
             .disabled(store.isOperating(on: worktree.id))
+            .townTooltip("More actions for \(worktree.displayName)")
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)

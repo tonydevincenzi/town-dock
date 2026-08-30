@@ -100,15 +100,17 @@ struct NukeSheet: View {
                     Text(worktree.displayName)
                         .font(.headline)
                     if worktree.gitStatus.isDirty {
-                        Label("Dirty working tree", systemImage: "exclamationmark.triangle.fill")
+                        Label("Dirty working tree", systemImage: "pencil")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(.gray)
+                            .townTooltip("This worktree contains modified, staged, or untracked files that deletion would permanently remove.")
                     }
                     Spacer()
                     if let instance = worktree.instance?.number {
                         Text("Instance \(instance)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.secondary)
+                            .townTooltip("Town instance number used to identify this worktree's ports and isolated storage.")
                     }
                 }
                 Text(worktree.path)
@@ -117,9 +119,13 @@ struct NukeSheet: View {
                     .textSelection(.enabled)
                 HStack(spacing: 14) {
                     Label("\(worktree.gitStatus.modifiedCount) modified", systemImage: "pencil")
+                        .townTooltip("Tracked files whose contents differ from the latest commit.")
                     Label("\(worktree.gitStatus.untrackedCount) untracked", systemImage: "questionmark.diamond")
+                        .townTooltip("Files Git has not been asked to track; they would also be permanently deleted.")
                     Label("\(worktree.gitStatus.ahead) ahead", systemImage: "arrow.up")
+                        .townTooltip("Local commits that have not been pushed to the configured upstream branch.")
                     Label("\(worktree.gitStatus.behind) behind", systemImage: "arrow.down")
+                        .townTooltip("Upstream commits that have not been incorporated into this local branch.")
                 }
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -266,6 +272,7 @@ struct NukeSheet: View {
                 }
             }
             .keyboardShortcut(.defaultAction)
+            .townTooltip("Stop attributed processes and permanently delete the selected worktree resources.")
             .disabled(
                 !confirmationMatches
                     || manifest?.canExecute != true
@@ -296,6 +303,7 @@ private struct DestructiveTargetRow: View {
                     Text(target.confidence.rawValue.capitalized)
                         .font(.caption2.weight(.semibold))
                         .foregroundStyle(target.confidence.tint)
+                        .townTooltip(target.confidence.helpText)
                 }
                 Text(target.identifier)
                     .font(.caption.monospaced())
@@ -313,9 +321,11 @@ private struct DestructiveTargetRow: View {
                 Text(bytes.byteCountLabel)
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
+                    .townTooltip("Estimated disk space this deletion will reclaim")
             }
             Image(systemName: willDelete ? "checkmark.circle.fill" : "minus.circle")
                 .foregroundStyle(willDelete ? .red : .secondary)
+                .townTooltip(willDelete ? "Included in the deletion manifest" : "Excluded because ownership is not safe to establish")
         }
         .padding(11)
         .opacity(willDelete ? 1 : 0.72)

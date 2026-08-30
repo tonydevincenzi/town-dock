@@ -66,6 +66,7 @@ struct WorktreeCard: View {
     private var summary: some View {
         HStack(alignment: .center, spacing: 11) {
             StatusDot(state: overallState, size: 8)
+                .townTooltip(overallState.helpText)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 7) {
@@ -74,8 +75,7 @@ struct WorktreeCard: View {
                         .lineLimit(1)
 
                     if worktree.gitStatus.isDirty {
-                        badge("DIRTY", tint: .orange)
-                            .help("This worktree has modified, staged, or untracked files.")
+                        badge("DIRTY", tint: .gray)
                     }
                     if worktree.health?.overall == .degraded {
                         badge("DEGRADED", tint: .orange)
@@ -87,7 +87,7 @@ struct WorktreeCard: View {
                         Image(systemName: "lock.fill")
                             .font(.caption2)
                             .foregroundStyle(TownTheme.muted)
-                            .help("Git worktree is locked")
+                            .townTooltip("Git worktree is locked")
                     }
                 }
 
@@ -114,7 +114,6 @@ struct WorktreeCard: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .help(isExpanded ? "Hide details" : "Show details")
             .accessibilityLabel(isExpanded ? "Hide worktree details" : "Show worktree details")
         }
     }
@@ -133,7 +132,7 @@ struct WorktreeCard: View {
                         .padding(.horizontal, 7)
                         .padding(.vertical, 4)
                         .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-                        .help("\(hiddenServiceCount) more service\(hiddenServiceCount == 1 ? "" : "s")")
+                        .townTooltip(hiddenServicesHelp)
                 }
             }
         } else {
@@ -143,6 +142,11 @@ struct WorktreeCard: View {
             )
             .font(.caption)
             .foregroundStyle(TownTheme.muted)
+            .townTooltip(
+                worktree.setupComplete
+                    ? "No Town service is currently listening for this worktree."
+                    : "Run the worktree setup script before starting its services."
+            )
         }
     }
 
@@ -200,7 +204,7 @@ struct WorktreeCard: View {
         .menuStyle(.borderlessButton)
         .tint(TownTheme.muted)
         .fixedSize()
-        .help("More actions")
+        .townTooltip("More actions")
     }
 
     private var details: some View {
@@ -213,7 +217,7 @@ struct WorktreeCard: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .textSelection(.enabled)
-                .help(worktree.path)
+                .townTooltip(worktree.path)
 
             if let instance = worktree.instance {
                 instanceSummary(instance)
@@ -238,20 +242,25 @@ struct WorktreeCard: View {
     private func instanceSummary(_ instance: InstanceSnapshot) -> some View {
         HStack(spacing: 14) {
             Label("Instance \(instance.number)", systemImage: "number.circle")
+                .townTooltip("Town assigns this number to derive the worktree's ports and isolated local storage.")
             if instance.confidence != .certain {
                 Label(instance.confidence.rawValue.capitalized, systemImage: "scope")
                     .foregroundStyle(instance.confidence.tint)
+                    .townTooltip(instance.confidence.helpText)
             }
             if !instance.processes.isEmpty {
                 Label("\(instance.processes.count) processes", systemImage: "cpu")
+                    .townTooltip("All live processes attributed to this worktree, including child processes.")
             }
             let cpuPercent = instance.processes.compactMap(\.cpuPercent).reduce(0, +)
             if !instance.processes.isEmpty {
                 Label("\(cpuPercent.cpuPercentLabel) CPU", systemImage: "gauge.with.dots.needle.33percent")
+                    .townTooltip("Combined current CPU usage of the attributed process tree.")
             }
             let memory = instance.processes.reduce(UInt64(0)) { $0 + $1.residentBytes }
             if memory > 0 {
                 Label(memory.byteCountLabel, systemImage: "memorychip")
+                    .townTooltip("Combined resident memory used by the attributed process tree.")
             }
             Spacer()
         }
@@ -304,6 +313,7 @@ struct WorktreeCard: View {
                     .foregroundStyle(health.overall.tint)
                 Text("Health: \(health.overall.displayName)")
                     .font(.caption.weight(.semibold))
+                    .townTooltip(health.overall.helpText)
                 if let measuredAt = health.measuredAt {
                     Text("· \(measuredAt.relativeLabel)")
                         .font(.caption)
@@ -351,6 +361,17 @@ struct WorktreeCard: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
             .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+            .townTooltip(badgeHelpText(text))
+    }
+
+    private func badgeHelpText(_ text: String) -> String {
+        switch text {
+        case "DIRTY": "This worktree has modified, staged, or untracked files that have not been committed."
+        case "DEGRADED": "The stack is running, but one or more service health checks are failing or incomplete."
+        case "INCOMPLETE": "Required worktree setup has not completed, so some controls or service data may be unavailable."
+        case "PRIMARY": "This is the repository's main checkout rather than a linked Git worktree."
+        default: text
+        }
     }
 
     private func servicePriority(_ kind: ServiceKind) -> Int {
@@ -364,6 +385,12 @@ struct WorktreeCard: View {
         case .convexDashboard: 6
         default: 20
         }
+    }
+
+    private var hiddenServicesHelp: String {
+        let hidden = orderedServices.dropFirst(visibleServices.count)
+        let labels = hidden.map { "\($0.kind.displayName) :\($0.port)" }
+        return "More configured services: " + labels.joined(separator: ", ")
     }
 }
 
@@ -385,9 +412,9 @@ private struct CompactPortChip: View {
                 chipLabel
             }
         }
-        .help(service.kind.isBrowserTarget && service.url != nil
-              ? "Open \(service.kind.displayName) on localhost:\(service.port)"
-              : "\(service.kind.displayName) on localhost:\(service.port)")
+        .townTooltip(service.kind.isBrowserTarget && service.url != nil
+              ? "\(service.state.displayName): Open \(service.kind.displayName) on localhost:\(service.port). \(service.state.helpText)"
+              : "\(service.state.displayName): \(service.kind.displayName) on localhost:\(service.port). \(service.state.helpText)")
         .contextMenu {
             if let url = service.url {
                 Button("Open in Chrome") { store.openInChrome(url) }
