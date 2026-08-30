@@ -119,6 +119,7 @@ public struct ServiceSnapshot: Identifiable, Codable, Hashable, Sendable {
     public let isShared: Bool
     public let cpuPercent: Double?
     public let residentBytes: UInt64?
+    public let metricsIdentity: String?
 
     public init(
         kind: ServiceKind,
@@ -129,7 +130,8 @@ public struct ServiceSnapshot: Identifiable, Codable, Hashable, Sendable {
         detail: String? = nil,
         isShared: Bool = false,
         cpuPercent: Double? = nil,
-        residentBytes: UInt64? = nil
+        residentBytes: UInt64? = nil,
+        metricsIdentity: String? = nil
     ) {
         self.kind = kind
         self.port = port
@@ -140,6 +142,7 @@ public struct ServiceSnapshot: Identifiable, Codable, Hashable, Sendable {
         self.isShared = isShared
         self.cpuPercent = cpuPercent
         self.residentBytes = residentBytes
+        self.metricsIdentity = metricsIdentity
     }
 }
 
@@ -385,6 +388,62 @@ public struct TownSnapshot: Codable, Hashable, Sendable {
             orphans: [],
             sharedServices: [],
             dormantStates: []
+        )
+    }
+}
+
+public struct WorktreeResourceUsage: Equatable, Sendable {
+    public let cpuPercent: Double
+    public let residentBytes: UInt64
+    public let processCount: Int
+    public let containerCount: Int
+
+    public init(
+        cpuPercent: Double,
+        residentBytes: UInt64,
+        processCount: Int,
+        containerCount: Int
+    ) {
+        self.cpuPercent = cpuPercent
+        self.residentBytes = residentBytes
+        self.processCount = processCount
+        self.containerCount = containerCount
+    }
+}
+
+public extension TownSnapshot {
+    /// Live resource use attributable to worktrees. Services backed by the
+    /// same Docker container are deliberately collapsed so exposed ports do
+    /// not multiply that container's CPU and resident-memory figures.
+    var worktreeResourceUsage: WorktreeResourceUsage {
+        var processesByIdentity: [String: ProcessIdentity] = [:]
+        var containersByIdentity: [String: ServiceSnapshot] = [:]
+
+        for worktree in worktrees {
+            guard let instance = worktree.instance else { continue }
+            for process in instance.processes {
+                processesByIdentity[process.id] = process
+            }
+            for service in instance.services where !service.isShared {
+                guard let identity = service.metricsIdentity else { continue }
+                containersByIdentity[identity] = service
+            }
+        }
+
+        let cpuPercent = processesByIdentity.values.compactMap(\.cpuPercent).reduce(0, +)
+            + containersByIdentity.values.compactMap(\.cpuPercent).reduce(0, +)
+        let residentBytes = (processesByIdentity.values.map(\.residentBytes)
+            + containersByIdentity.values.compactMap(\.residentBytes))
+            .reduce(UInt64(0)) { total, bytes in
+                let (sum, overflow) = total.addingReportingOverflow(bytes)
+                return overflow ? UInt64.max : sum
+            }
+
+        return WorktreeResourceUsage(
+            cpuPercent: cpuPercent,
+            residentBytes: residentBytes,
+            processCount: processesByIdentity.count,
+            containerCount: containersByIdentity.count
         )
     }
 }

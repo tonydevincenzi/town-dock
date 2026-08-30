@@ -772,7 +772,8 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 detail: nil,
                 isShared: false,
                 cpuPercent: metrics?.cpuPercent,
-                residentBytes: metrics?.residentBytes
+                residentBytes: metrics?.residentBytes,
+                metricsIdentity: metrics?.identity
             )
         }
     }
@@ -799,7 +800,8 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 detail: nil,
                 isShared: true,
                 cpuPercent: metrics?.cpuPercent,
-                residentBytes: metrics?.residentBytes
+                residentBytes: metrics?.residentBytes,
+                metricsIdentity: metrics?.identity
             )
         }
     }
@@ -809,11 +811,14 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         listeners: [ListenerRecord],
         processByPID: [Int32: PSProcessRecord],
         docker: DockerInventory
-    ) -> (cpuPercent: Double, residentBytes: UInt64)? {
+    ) -> (cpuPercent: Double, residentBytes: UInt64, identity: String?)? {
         if let container = docker.containers.first(where: {
             $0.publishedPorts.contains(port) && $0.cpuPercent != nil && $0.residentBytes != nil
         }), let cpuPercent = container.cpuPercent, let residentBytes = container.residentBytes {
-            return (cpuPercent, residentBytes)
+            let identity = container.id.isEmpty
+                ? "docker-name:\(container.name.lowercased())"
+                : "docker:\(container.id.lowercased())"
+            return (cpuPercent, residentBytes, identity)
         }
 
         let processes = Set(listeners.map(\.pid)).compactMap { processByPID[$0] }
@@ -824,7 +829,8 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         }
         return (
             cpuPercent: processes.reduce(0) { $0 + $1.cpuPercent },
-            residentBytes: residentBytes
+            residentBytes: residentBytes,
+            identity: nil
         )
     }
 

@@ -276,6 +276,8 @@ private struct WorktreesDashboard: View {
                         count: store.snapshot.worktrees.count
                     )
 
+                    WorktreeResourceRollup(usage: store.snapshot.worktreeResourceUsage)
+
                     Button(role: .destructive) {
                         store.requestBulkNuke()
                     } label: {
@@ -348,6 +350,35 @@ private struct WorktreesDashboard: View {
                 }
             }
         }
+    }
+}
+
+private struct WorktreeResourceRollup: View {
+    let usage: WorktreeResourceUsage
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Label("CPU \(usage.cpuPercent.cpuPercentLabel)", systemImage: "gauge.with.dots.needle.33percent")
+            Label("RAM \(memoryLabel)", systemImage: "memorychip")
+        }
+        .font(.caption.monospacedDigit().weight(.medium))
+        .foregroundStyle(TownTheme.muted)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(TownTheme.surfaceRaised, in: Capsule())
+        .townTooltip(helpText)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("All worktrees: \(usage.cpuPercent.cpuPercentLabel) CPU, \(memoryLabel) memory")
+    }
+
+    private var memoryLabel: String {
+        usage.residentBytes == 0 ? "0 MB" : usage.residentBytes.byteCountLabel
+    }
+
+    private var helpText: String {
+        let processes = "\(usage.processCount) attributed process\(usage.processCount == 1 ? "" : "es")"
+        let containers = "\(usage.containerCount) Docker container\(usage.containerCount == 1 ? "" : "s")"
+        return "Current CPU and resident memory across all worktrees: \(processes) and \(containers). Shared infrastructure is excluded."
     }
 }
 
