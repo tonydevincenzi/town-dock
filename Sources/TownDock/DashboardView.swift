@@ -11,7 +11,7 @@ struct DashboardView: View {
         HStack(spacing: 0) {
             if isSidebarVisible {
                 sidebar
-                    .frame(width: 215)
+                    .frame(width: 224)
 
                 Rectangle()
                     .fill(TownTheme.border)
@@ -46,23 +46,23 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.white.opacity(0.09))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color.black.opacity(0.22))
                     PhosphorStackIcon()
                         .padding(6)
                 }
-                .frame(width: 28, height: 28)
+                .frame(width: 30, height: 30)
                 Text("Town Dock")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 15, weight: .medium))
                 Spacer()
                 StatusDot(
                     state: store.runningWorktreeCount > 0 ? .running : .stopped,
                     size: 7
                 )
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 18)
+            .padding(.horizontal, 13)
+            .padding(.top, 13)
+            .padding(.bottom, 20)
 
             sidebarSection("Town") {
                 sidebarRow(.worktrees, count: store.snapshot.worktrees.count)
@@ -78,9 +78,9 @@ struct DashboardView: View {
 
             VStack(alignment: .leading, spacing: 5) {
                 Text("Repository")
-                    .font(.caption2.weight(.semibold))
+                    .font(.system(size: 11, weight: .regular))
                     .foregroundStyle(TownTheme.muted)
-                    .textCase(.uppercase)
+                    .textCase(nil)
                 Text(store.repositoryPath)
                     .font(.caption2.monospaced())
                     .foregroundStyle(TownTheme.muted)
@@ -94,7 +94,7 @@ struct DashboardView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(TownTheme.sidebar)
+        .background(TownTheme.sidebar.ignoresSafeArea())
     }
 
     private func sidebarSection<Content: View>(
@@ -102,12 +102,12 @@ struct DashboardView: View {
         @ViewBuilder content: () -> Content
     ) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
-                .tracking(0.8)
+            Text(title)
+                .font(.system(size: 11, weight: .regular))
                 .foregroundStyle(TownTheme.muted)
-                .padding(.horizontal, 17)
-                .padding(.bottom, 3)
+                .textCase(nil)
+                .padding(.horizontal, 15)
+                .padding(.bottom, 4)
             content()
         }
         .padding(.bottom, 17)
@@ -122,7 +122,7 @@ struct DashboardView: View {
                     .font(.system(size: 12, weight: .medium))
                     .frame(width: 17)
                 Text(section.title)
-                    .font(.system(size: 13, weight: selection == section ? .medium : .regular))
+                    .font(.system(size: 13, weight: .regular))
                 Spacer()
                 if count > 0 {
                     Text("\(count)")
@@ -131,16 +131,16 @@ struct DashboardView: View {
                 }
             }
             .foregroundStyle(selection == section ? Color.primary : TownTheme.muted)
-            .padding(.horizontal, 10)
-            .frame(height: 32)
+            .padding(.horizontal, 11)
+            .frame(height: 34)
             .contentShape(Rectangle())
             .background(
                 selection == section ? TownTheme.selection : .clear,
-                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                in: RoundedRectangle(cornerRadius: 8, style: .continuous)
             )
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 7)
     }
 
     @ViewBuilder
@@ -159,7 +159,7 @@ struct DashboardView: View {
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
-        ToolbarItemGroup {
+        ToolbarItem(placement: .navigation) {
             Button {
                 isSidebarVisible.toggle()
             } label: {
@@ -169,7 +169,9 @@ struct DashboardView: View {
                 )
             }
             .help(isSidebarVisible ? "Hide sidebar" : "Show sidebar")
+        }
 
+        ToolbarItemGroup(placement: .primaryAction) {
             if store.isRefreshing {
                 ProgressView()
                     .controlSize(.small)
@@ -238,7 +240,7 @@ private struct WorktreesDashboard: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 SectionHeader(
                     "Town worktrees",
                     subtitle: "Live services, Git state, and controls for every checkout",
@@ -280,7 +282,7 @@ private struct WorktreesDashboard: View {
                     warnings
                 }
             }
-            .padding(20)
+            .padding(22)
         }
     }
 
@@ -316,7 +318,7 @@ private struct OrphansDashboard: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 14) {
+            LazyVStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
                     SectionHeader(
                         "Orphaned Town resources",
@@ -345,7 +347,7 @@ private struct OrphansDashboard: View {
                     )
                 }
             }
-            .padding(20)
+            .padding(22)
         }
     }
 }

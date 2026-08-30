@@ -43,11 +43,11 @@ struct WorktreeCard: View {
                     .padding(.top, 14)
             }
         }
-        .padding(14)
-        .background(TownTheme.surface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .padding(16)
+        .background(TownTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                .stroke(isExpanded ? TownTheme.strongBorder : TownTheme.border, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(TownTheme.border, lineWidth: 1)
         }
         .confirmationDialog(
             "Force-kill every verified process for \(worktree.displayName)?",
@@ -64,13 +64,13 @@ struct WorktreeCard: View {
     }
 
     private var summary: some View {
-        HStack(alignment: .center, spacing: 12) {
-            StatusDot(state: overallState, size: 9)
+        HStack(alignment: .center, spacing: 11) {
+            StatusDot(state: overallState, size: 8)
 
             VStack(alignment: .leading, spacing: 8) {
                 HStack(spacing: 7) {
                     Text(worktree.displayName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 14, weight: .medium))
                         .lineLimit(1)
 
                     if worktree.gitStatus.isDirty {
@@ -162,8 +162,7 @@ struct WorktreeCard: View {
             } label: {
                 Label("Start", systemImage: "play.fill")
             }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.small)
+            .buttonStyle(LinearButtonStyle(emphasized: true))
             .disabled(isOperating || !worktree.setupComplete)
         }
     }
@@ -199,6 +198,7 @@ struct WorktreeCard: View {
                 .contentShape(Rectangle())
         }
         .menuStyle(.borderlessButton)
+        .tint(TownTheme.muted)
         .fixedSize()
         .help("More actions")
     }
@@ -346,15 +346,11 @@ struct WorktreeCard: View {
 
     private func badge(_ text: String, tint: Color) -> some View {
         Text(text)
-            .font(.system(size: 9, weight: .bold, design: .rounded))
+            .font(.system(size: 9, weight: .semibold))
             .foregroundStyle(tint)
             .padding(.horizontal, 6)
             .padding(.vertical, 2)
-            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .stroke(tint.opacity(0.13), lineWidth: 1)
-            }
+            .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 
     private func servicePriority(_ kind: ServiceKind) -> Int {
@@ -421,9 +417,9 @@ private struct CompactPortChip: View {
         .font(.caption2.weight(.medium))
         .padding(.horizontal, 7)
         .padding(.vertical, 4)
-        .background(Color.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .background(TownTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 5, style: .continuous)
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
                 .stroke(TownTheme.border, lineWidth: 1)
         }
         .contentShape(Rectangle())

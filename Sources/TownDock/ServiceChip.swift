@@ -41,9 +41,9 @@ struct ServiceChip: View {
         }
         .padding(.horizontal, compact ? 9 : 10)
         .padding(.vertical, compact ? 7 : 8)
-        .background(TownTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(TownTheme.surfaceRaised, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 7, style: .continuous)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .stroke(TownTheme.border, lineWidth: 1)
         }
         .contentShape(Rectangle())

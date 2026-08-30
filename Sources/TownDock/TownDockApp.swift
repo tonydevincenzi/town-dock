@@ -147,8 +147,9 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.appearance = NSAppearance(named: .darkAqua)
+            window.backgroundColor = NSColor(calibratedWhite: 0.09, alpha: 1)
             window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
+            window.titleVisibility = .visible
             window.styleMask.insert(.fullSizeContentView)
             window.toolbarStyle = .unifiedCompact
             window.center()

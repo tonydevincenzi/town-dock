@@ -2,33 +2,38 @@ import SwiftUI
 import TownDockCore
 
 enum TownTheme {
-    static let canvas = Color(red: 0.055, green: 0.057, blue: 0.064)
-    static let sidebar = Color(red: 0.035, green: 0.037, blue: 0.043)
-    static let surface = Color(red: 0.082, green: 0.085, blue: 0.094)
-    static let surfaceRaised = Color(red: 0.105, green: 0.109, blue: 0.120)
-    static let selection = Color.white.opacity(0.095)
-    static let border = Color.white.opacity(0.075)
-    static let strongBorder = Color.white.opacity(0.12)
-    static let muted = Color.white.opacity(0.48)
-    static let accent = Color(red: 0.55, green: 0.49, blue: 0.98)
+    // Codex-inspired neutral hierarchy: a charcoal navigation rail, a darker
+    // working canvas, and quiet elevated surfaces without a colored cast.
+    static let canvas = Color(red: 0.090, green: 0.090, blue: 0.090)
+    static let sidebar = Color(red: 0.180, green: 0.180, blue: 0.180)
+    static let surface = Color(red: 0.140, green: 0.140, blue: 0.140)
+    static let surfaceRaised = Color(red: 0.185, green: 0.185, blue: 0.185)
+    static let selection = Color(red: 0.250, green: 0.250, blue: 0.250)
+    static let border = Color.white.opacity(0.085)
+    static let strongBorder = Color.white.opacity(0.145)
+    static let muted = Color.white.opacity(0.58)
+    static let accent = Color.white.opacity(0.80)
 }
 
 struct LinearButtonStyle: ButtonStyle {
     var destructive = false
+    var emphasized = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.caption.weight(.medium))
-            .foregroundStyle(destructive ? Color.red : Color.primary)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(destructive ? Color.red : Color.white.opacity(0.88))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6.5)
             .background(
-                configuration.isPressed ? Color.white.opacity(0.10) : Color.white.opacity(0.055),
-                in: RoundedRectangle(cornerRadius: 6, style: .continuous)
+                configuration.isPressed
+                    ? Color.white.opacity(0.16)
+                    : (emphasized ? Color.white.opacity(0.13) : TownTheme.surfaceRaised),
+                in: RoundedRectangle(cornerRadius: 7, style: .continuous)
             )
             .overlay {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(TownTheme.border, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(emphasized ? TownTheme.strongBorder : TownTheme.border, lineWidth: 1)
             }
     }
 }
@@ -174,7 +179,6 @@ struct StatusDot: View {
         Circle()
             .fill(state.tint)
             .frame(width: size, height: size)
-            .shadow(color: state == .running ? state.tint.opacity(0.45) : .clear, radius: 2)
             .accessibilityLabel(state.displayName)
     }
 }
@@ -193,26 +197,22 @@ struct SectionHeader: View {
     }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 11) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-                Image(systemName: symbol)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 28, height: 28)
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(TownTheme.muted)
+                .frame(width: 20)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 7) {
                     Text(title)
-                        .font(.system(size: 17, weight: .semibold))
+                        .font(.system(size: 17, weight: .medium))
                     if let count {
                         Text("\(count)")
-                            .font(.caption2.monospacedDigit().weight(.semibold))
+                            .font(.caption2.monospacedDigit().weight(.medium))
                             .foregroundStyle(TownTheme.muted)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.white.opacity(0.06), in: Capsule())
+                            .background(TownTheme.surfaceRaised, in: Capsule())
                     }
                 }
                 if let subtitle {
@@ -246,9 +246,9 @@ struct EmptySectionView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(28)
-        .background(TownTheme.surface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+        .background(TownTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .stroke(TownTheme.border, lineWidth: 1)
         }
     }
@@ -259,10 +259,10 @@ struct InsetCard<Content: View>: View {
 
     var body: some View {
         content
-            .padding(15)
-            .background(TownTheme.surface, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .padding(16)
+            .background(TownTheme.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(TownTheme.border, lineWidth: 1)
             }
     }
