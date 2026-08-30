@@ -82,6 +82,7 @@ jobs:
             --wait
           xcrun stapler staple "dist/Town Dock.app"
           xcrun stapler validate "dist/Town Dock.app"
+          rm -f "$TOWN_DOCK_ARCHIVE"
           ditto -c -k --sequesterRsrc --keepParent "dist/Town Dock.app" "$TOWN_DOCK_ARCHIVE"
 
       - name: Generate signed update feed
@@ -103,6 +104,14 @@ jobs:
           codesign --verify --deep --strict --verbose=2 "dist/Town Dock.app"
           spctl --assess --type execute --verbose=2 "dist/Town Dock.app"
           test -f dist/updates/appcast.xml
+          TOWN_DOCK_RELEASE_VERSION="${GITHUB_REF_NAME#v}"
+          TOWN_DOCK_ARCHIVE="dist/updates/Town-Dock-$TOWN_DOCK_RELEASE_VERSION.zip"
+          TOWN_DOCK_VERIFY_DIR="$RUNNER_TEMP/town-dock-release-verification"
+          rm -rf "$TOWN_DOCK_VERIFY_DIR"
+          mkdir -p "$TOWN_DOCK_VERIFY_DIR"
+          ditto -x -k "$TOWN_DOCK_ARCHIVE" "$TOWN_DOCK_VERIFY_DIR"
+          codesign --verify --deep --strict --verbose=2 "$TOWN_DOCK_VERIFY_DIR/Town Dock.app"
+          spctl --assess --type execute --verbose=2 "$TOWN_DOCK_VERIFY_DIR/Town Dock.app"
 
       - name: Publish GitHub release
         env:
