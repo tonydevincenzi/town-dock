@@ -74,7 +74,7 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
         button.toolTip = "Town Sheriff"
-        button.title = " Town Sheriff"
+        button.title = ""
         button.imageScaling = .scaleProportionallyDown
         button.setAccessibilityLabel("Town Sheriff")
         statusItem.isVisible = true
