@@ -19,12 +19,21 @@ enum TownTheme {
 struct LinearButtonStyle: ButtonStyle {
     var destructive = false
     var emphasized = false
+    var fillsWidth = false
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 12, weight: .medium))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
+            .frame(
+                minWidth: fillsWidth ? 0 : nil,
+                maxWidth: fillsWidth ? .infinity : nil,
+                minHeight: fillsWidth ? 15 : nil,
+                maxHeight: fillsWidth ? 15 : nil
+            )
             .foregroundStyle(destructive ? Color.red : Color.white.opacity(0.88))
-            .padding(.horizontal, 11)
+            .padding(.horizontal, fillsWidth ? 8 : 11)
             .padding(.vertical, 6.5)
             .background(
                 configuration.isPressed

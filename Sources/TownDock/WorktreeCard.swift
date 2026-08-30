@@ -362,28 +362,28 @@ struct WorktreeCard: View {
             } label: {
                 Label("Finder", systemImage: "folder")
             }
-            .buttonStyle(LinearButtonStyle())
+            .buttonStyle(LinearButtonStyle(fillsWidth: true))
 
             Button {
                 store.requestConsole(worktree)
             } label: {
                 Label("Console", systemImage: "terminal")
             }
-            .buttonStyle(LinearButtonStyle())
+            .buttonStyle(LinearButtonStyle(fillsWidth: true))
 
             Button {
                 store.requestLogs(worktree)
             } label: {
                 Label("Logs", systemImage: "text.alignleft")
             }
-            .buttonStyle(LinearButtonStyle())
+            .buttonStyle(LinearButtonStyle(fillsWidth: true))
 
             Button {
                 store.openOrFocusTerminal(for: worktree)
             } label: {
                 Label("Shell", systemImage: "terminal")
             }
-            .buttonStyle(LinearButtonStyle())
+            .buttonStyle(LinearButtonStyle(fillsWidth: true))
             .townTooltip("Focus the Terminal tab that owns this stack, or open a new shell in the worktree.")
 
             Button {
@@ -391,17 +391,15 @@ struct WorktreeCard: View {
             } label: {
                 Label("Convex", systemImage: "cylinder.split.1x2")
             }
-            .buttonStyle(LinearButtonStyle())
+            .buttonStyle(LinearButtonStyle(fillsWidth: true))
             .townTooltip("Clear or fully reset this worktree’s pinned local Convex instance.")
-
-            Spacer()
 
             if isRunning {
                 Button("Stop", systemImage: "stop.fill") { store.stop(worktree) }
-                    .buttonStyle(LinearButtonStyle())
+                    .buttonStyle(LinearButtonStyle(fillsWidth: true))
                     .disabled(isOperating)
                 Button("Restart", systemImage: "arrow.clockwise") { store.restart(worktree) }
-                    .buttonStyle(LinearButtonStyle())
+                    .buttonStyle(LinearButtonStyle(fillsWidth: true))
                     .disabled(isOperating)
             }
         }
