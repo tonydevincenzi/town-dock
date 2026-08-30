@@ -27,7 +27,7 @@
     <key>LSUIElement</key>
     <false/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Town Dock uses Terminal to open a shell at a selected Town worktree.</string>
+	<string>Town Dock uses Terminal to focus a stack tab and show its local-stack output.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>

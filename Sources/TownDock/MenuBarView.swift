@@ -34,7 +34,10 @@ struct MenuBarView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(store.snapshot.worktrees.prefix(7)) { worktree in
-                            MenuBarWorktreeRow(worktree: worktree)
+                            MenuBarWorktreeRow(
+                                worktree: worktree,
+                                showDashboardAction: showDashboard
+                            )
                             if worktree.id != store.snapshot.worktrees.prefix(7).last?.id {
                                 Divider().padding(.leading, 38)
                             }
@@ -145,6 +148,7 @@ struct MenuBarView: View {
 private struct MenuBarWorktreeRow: View {
     @EnvironmentObject private var store: TownStore
     let worktree: WorktreeSnapshot
+    let showDashboardAction: () -> Void
 
     private var isRunning: Bool { worktree.instance?.isRunning == true }
     private var state: ServiceState {
@@ -184,7 +188,19 @@ private struct MenuBarWorktreeRow: View {
 
             Menu {
                 Button("Open in Finder") { store.revealInFinder(path: worktree.path) }
-                Button("Open in Terminal") { store.openTerminal(at: worktree.path) }
+                Button("Open Stack Console") {
+                    showDashboardAction()
+                    DispatchQueue.main.async { store.requestConsole(worktree) }
+                }
+                Button("View Service Logs") {
+                    showDashboardAction()
+                    DispatchQueue.main.async { store.requestLogs(worktree) }
+                }
+                Button("Focus Terminal or Open Shell") { store.openOrFocusTerminal(for: worktree) }
+                Button("Manage Local Convex…") {
+                    showDashboardAction()
+                    DispatchQueue.main.async { store.requestConvexMaintenance(worktree) }
+                }
                 Divider()
                 if isRunning {
                     Button("Stop") { store.stop(worktree) }

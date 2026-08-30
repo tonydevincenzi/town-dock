@@ -38,6 +38,18 @@ struct DashboardView: View {
             OrphanCleanupSheet()
                 .environmentObject(store)
         }
+        .sheet(item: $store.logWorktree) { worktree in
+            LogConsoleSheet(worktree: worktree)
+                .environmentObject(store)
+        }
+        .sheet(item: $store.consoleWorktree) { worktree in
+            StackConsoleSheet(worktree: worktree)
+                .environmentObject(store)
+        }
+        .sheet(item: $store.convexWorktree) { worktree in
+            ConvexMaintenanceSheet(worktree: worktree)
+                .environmentObject(store)
+        }
         .overlay(alignment: .top) {
             notificationOverlay
         }

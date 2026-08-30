@@ -12,6 +12,8 @@ struct WorktreeCard: View {
 
     private var isRunning: Bool { worktree.instance?.isRunning == true }
     private var isOperating: Bool { store.isOperating(on: worktree.id) }
+    private var managedRun: ManagedRunRecord? { store.managedRun(for: worktree) }
+    private var isStarting: Bool { store.isManagedLaunchPending(worktree) }
     private var overallState: ServiceState {
         worktree.health?.overall ?? (isRunning ? .running : .stopped)
     }
@@ -83,6 +85,9 @@ struct WorktreeCard: View {
                     if !worktree.setupComplete {
                         badge("INCOMPLETE", tint: .orange)
                     }
+                    if managedRun != nil {
+                        badge("MANAGED", tint: .gray)
+                    }
                     if worktree.isLocked {
                         Image(systemName: "lock.fill")
                             .font(.caption2)
@@ -99,6 +104,13 @@ struct WorktreeCard: View {
                 ProgressView()
                     .controlSize(.small)
             }
+
+            Button {
+                store.requestConsole(worktree)
+            } label: {
+                Label("Console", systemImage: "terminal")
+            }
+            .buttonStyle(LinearButtonStyle())
 
             primaryAction
             overflowMenu
@@ -160,6 +172,13 @@ struct WorktreeCard: View {
             }
             .buttonStyle(LinearButtonStyle())
             .disabled(isOperating)
+        } else if isStarting {
+            Button {} label: {
+                Label("Starting", systemImage: "progress.indicator")
+            }
+            .buttonStyle(LinearButtonStyle(emphasized: true))
+            .disabled(true)
+            .townTooltip("Town Dock launched this stack and is waiting for its services to become ready.")
         } else if !isRunning {
             Button {
                 store.start(worktree)
@@ -174,7 +193,10 @@ struct WorktreeCard: View {
     private var overflowMenu: some View {
         Menu {
             Button("Open Folder in Finder") { store.revealInFinder(path: worktree.path) }
-            Button("Open in Terminal") { store.openTerminal(at: worktree.path) }
+            Button("Open Stack Console") { store.requestConsole(worktree) }
+            Button("View Service Logs") { store.requestLogs(worktree) }
+            Button("Focus Stack Terminal or Open Shell") { store.openOrFocusTerminal(for: worktree) }
+            Button("Manage Local Convex…") { store.requestConvexMaintenance(worktree) }
             Button("Copy Path") { store.copy(worktree.path) }
             Button("Copy Commit") { store.copy(worktree.head) }
 
@@ -227,6 +249,16 @@ struct WorktreeCard: View {
                 if !instance.processes.isEmpty {
                     processDisclosure(instance.processes)
                 }
+            }
+
+            if let managedRun {
+                Label(
+                    "Managed by Town Dock · started \(managedRun.launchedAt.relativeLabel)",
+                    systemImage: "switch.2"
+                )
+                .font(.caption)
+                .foregroundStyle(TownTheme.muted)
+                .townTooltip("Town Dock launched this stack and can rediscover it after the app restarts.")
             }
 
             if let health = worktree.health,
@@ -333,11 +365,34 @@ struct WorktreeCard: View {
             .buttonStyle(LinearButtonStyle())
 
             Button {
-                store.openTerminal(at: worktree.path)
+                store.requestConsole(worktree)
             } label: {
-                Label("Terminal", systemImage: "terminal")
+                Label("Console", systemImage: "terminal")
             }
             .buttonStyle(LinearButtonStyle())
+
+            Button {
+                store.requestLogs(worktree)
+            } label: {
+                Label("Logs", systemImage: "text.alignleft")
+            }
+            .buttonStyle(LinearButtonStyle())
+
+            Button {
+                store.openOrFocusTerminal(for: worktree)
+            } label: {
+                Label("Shell", systemImage: "terminal")
+            }
+            .buttonStyle(LinearButtonStyle())
+            .townTooltip("Focus the Terminal tab that owns this stack, or open a new shell in the worktree.")
+
+            Button {
+                store.requestConvexMaintenance(worktree)
+            } label: {
+                Label("Convex", systemImage: "cylinder.split.1x2")
+            }
+            .buttonStyle(LinearButtonStyle())
+            .townTooltip("Clear or fully reset this worktree’s pinned local Convex instance.")
 
             Spacer()
 
@@ -369,6 +424,7 @@ struct WorktreeCard: View {
         case "DIRTY": "This worktree has modified, staged, or untracked files that have not been committed."
         case "DEGRADED": "The stack is running, but one or more service health checks are failing or incomplete."
         case "INCOMPLETE": "Required worktree setup has not completed, so some controls or service data may be unavailable."
+        case "MANAGED": "Town Dock launched this stack and remembers it across app restarts."
         case "PRIMARY": "This is the repository's main checkout rather than a linked Git worktree."
         default: text
         }

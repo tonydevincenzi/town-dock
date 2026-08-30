@@ -17,7 +17,13 @@ worktrees, their local service graphs, and orphaned processes/storage.
 - Open frontend/service URLs in Google Chrome
 - Reveal a worktree in Finder or open it in Terminal
 - Start, stop, restart, or force-kill a worktree's verified service graph
+- Reconnect to stacks launched by Town Dock after the app restarts
+- Open a selectable, redacted console for the unified `mise run local-stack` output
+- Follow bounded, live tails of each worktree's existing `logs/*.log` files
+- Focus the Terminal.app tab that owns a manually launched stack when available
+- Clear a pinned local Convex deployment or fully rebuild its verified per-worktree state
 - Preview a complete deletion manifest before permanently removing a worktree
+- Safely repair and remove stranded prunable worktrees whose `.git` link is missing
 - Keep local branch deletion as a separate, explicit checkbox
 
 Town Dock never displays raw Town backend arguments or the full

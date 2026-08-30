@@ -59,6 +59,7 @@ public actor TownControlEngine {
     private let launchProcess: ControlLauncher
     private let sendSignal: ControlSignalSender
     private let sleep: ControlSleeper
+    private let consoleRoot: URL?
 
     public init(commandRunner: CommandRunner = CommandRunner()) {
         self.runCommand = { tool, arguments, workingDirectory, allowedExitCodes in
@@ -75,25 +76,34 @@ public actor TownControlEngine {
         self.sleep = { nanoseconds in
             try await Task.sleep(nanoseconds: nanoseconds)
         }
+        self.consoleRoot = nil
     }
 
     init(
         runCommand: @escaping ControlCommand,
         launchProcess: @escaping ControlLauncher = TownControlEngine.defaultLauncher,
         sendSignal: @escaping ControlSignalSender = TownControlEngine.defaultSignalSender,
-        sleep: @escaping ControlSleeper = { _ in }
+        sleep: @escaping ControlSleeper = { _ in },
+        consoleRoot: URL? = nil
     ) {
         self.runCommand = runCommand
         self.launchProcess = launchProcess
         self.sendSignal = sendSignal
         self.sleep = sleep
+        self.consoleRoot = consoleRoot
     }
 
-    /// Starts Town's sanctioned local-stack task directly. The returned PID is
-    /// the long-lived launcher; output remains intentionally detached because
-    /// it can contain local admin credentials.
+    /// Starts Town's sanctioned local-stack task in a detached pseudo-terminal.
+    /// The owner-only transcript lets Town Dock display the same unified stream
+    /// as an interactive launch; values are redacted before they reach the UI.
     public func start(_ worktree: WorktreeSnapshot) async throws -> ControlResult {
         try launch(worktree, allowPreviouslyRunning: false, action: .start)
+    }
+
+    /// Relaunches the same numbered stack after a separately verified
+    /// maintenance operation has already stopped it and removed local state.
+    public func startAfterMaintenance(_ worktree: WorktreeSnapshot) async throws -> ControlResult {
+        try launch(worktree, allowPreviouslyRunning: true, action: .restart)
     }
 
     /// Sends TERM to the verified launcher(s), gives Town's cleanup handlers a
@@ -326,7 +336,13 @@ public actor TownControlEngine {
             arguments += ["--", "-n", String(number)]
         }
 
-        let pid = try launchProcess(mise, arguments, directory)
+        let capture = try prepareConsoleCapture(for: directory)
+        let script = URL(fileURLWithPath: "/usr/bin/script", isDirectory: false)
+        guard FileManager.default.isExecutableFile(atPath: script.path) else {
+            throw TownDockError.commandFailed("macOS's pseudo-terminal recorder is unavailable.")
+        }
+        let scriptArguments = ["-q", "-F", "-t", "0", capture.path, mise.path] + arguments
+        let pid = try launchProcess(script, scriptArguments, directory)
         return ControlResult(
             action: action,
             affectedProcessIDs: [pid],
@@ -459,6 +475,45 @@ public actor TownControlEngine {
             )
         }
         return directory
+    }
+
+    private func prepareConsoleCapture(for worktree: URL) throws -> URL {
+        let capture = StackConsoleCapture.captureURL(
+            for: worktree.path,
+            rootDirectory: consoleRoot
+        )
+        let directory = capture.deletingLastPathComponent()
+        do {
+            try FileManager.default.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o700],
+                ofItemAtPath: directory.path
+            )
+            if FileManager.default.fileExists(atPath: capture.path) {
+                let handle = try FileHandle(forWritingTo: capture)
+                try handle.truncate(atOffset: 0)
+                try handle.close()
+            } else if !FileManager.default.createFile(
+                atPath: capture.path,
+                contents: Data(),
+                attributes: [.posixPermissions: 0o600]
+            ) {
+                throw TownDockError.commandFailed("Could not create the stack console capture.")
+            }
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o600],
+                ofItemAtPath: capture.path
+            )
+            return capture
+        } catch let error as TownDockError {
+            throw error
+        } catch {
+            throw TownDockError.commandFailed("Could not prepare the stack console capture.")
+        }
     }
 
     private func signal(_ pid: Int32, _ value: Int32) throws {

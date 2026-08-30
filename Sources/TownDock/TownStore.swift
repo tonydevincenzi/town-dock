@@ -21,6 +21,24 @@ final class TownStore: ObservableObject {
     @Published private(set) var activeOperations: Set<String> = []
     @Published private(set) var lastError: String?
     @Published private(set) var activityMessage: String?
+    @Published private(set) var managedRuns: [ManagedRunRecord] = []
+
+    @Published var logWorktree: WorktreeSnapshot?
+    @Published private(set) var worktreeLogs: [WorktreeLogFile] = []
+    @Published var selectedLogID: String?
+    @Published private(set) var isRefreshingLogs = false
+    @Published private(set) var logError: String?
+
+    @Published var consoleWorktree: WorktreeSnapshot?
+    @Published private(set) var stackConsole: StackConsoleSnapshot?
+    @Published private(set) var isRefreshingConsole = false
+    @Published private(set) var consoleError: String?
+
+    @Published var convexWorktree: WorktreeSnapshot?
+    @Published private(set) var convexMaintenancePlan: ConvexMaintenancePlan?
+    @Published private(set) var isPreparingConvexMaintenance = false
+    @Published private(set) var isExecutingConvexMaintenance = false
+    @Published private(set) var convexMaintenanceError: String?
 
     @Published var nukeWorktree: WorktreeSnapshot?
     @Published private(set) var nukeManifest: NukeManifest?
@@ -47,6 +65,11 @@ final class TownStore: ObservableObject {
     private let controls: TownControlEngine
     private let nuker: NukeEngine
     private let registry: TownRegistry
+    private let managedRunRegistry: ManagedRunRegistry
+    private let logReader: WorktreeLogReader
+    private let consoleReader: StackConsoleReader
+    private let convexMaintenance: ConvexMaintenanceEngine
+    private let terminalSessions = TerminalSessionCoordinator()
     private var pollingTask: Task<Void, Never>?
     private var nukePreparationToken = UUID()
     private var bulkNukePreparationToken = UUID()
@@ -60,6 +83,10 @@ final class TownStore: ObservableObject {
         let registry = TownRegistry()
         self.registry = registry
         nuker = NukeEngine(registry: registry)
+        managedRunRegistry = ManagedRunRegistry()
+        logReader = WorktreeLogReader()
+        consoleReader = StackConsoleReader()
+        convexMaintenance = ConvexMaintenanceEngine()
 
         // MenuBarExtra content is created lazily the first time it is opened.
         // Start discovery here so the icon, counts, and durable ownership
@@ -123,6 +150,9 @@ final class TownStore: ObservableObject {
             let discovered = try await discovery.snapshot()
             try await registry.record(snapshot: discovered)
             snapshot = await registry.enrich(snapshot: discovered)
+            if let reconciled = try? await managedRunRegistry.reconcile(snapshot: snapshot) {
+                managedRuns = reconciled
+            }
             lastError = nil
         } catch is CancellationError {
             return
@@ -135,26 +165,46 @@ final class TownStore: ObservableObject {
 
     func start(_ worktree: WorktreeSnapshot) {
         runControl(key: operationKey("start", worktree.id)) {
-            try await self.controls.start(worktree)
+            let result = try await self.controls.start(worktree)
+            await self.recordManagedLaunch(result, for: worktree)
+            return result
         }
     }
 
     func stop(_ worktree: WorktreeSnapshot) {
         runControl(key: operationKey("stop", worktree.id)) {
-            try await self.controls.stop(worktree)
+            let result = try await self.controls.stop(worktree)
+            await self.forgetManagedLaunch(for: worktree)
+            return result
         }
     }
 
     func restart(_ worktree: WorktreeSnapshot) {
         runControl(key: operationKey("restart", worktree.id)) {
-            try await self.controls.restart(worktree)
+            let result = try await self.controls.restart(worktree)
+            await self.recordManagedLaunch(result, for: worktree)
+            return result
         }
     }
 
     func forceKill(_ worktree: WorktreeSnapshot) {
         runControl(key: operationKey("kill", worktree.id)) {
-            try await self.controls.forceKill(worktree)
+            let result = try await self.controls.forceKill(worktree)
+            await self.forgetManagedLaunch(for: worktree)
+            return result
         }
+    }
+
+    func managedRun(for worktree: WorktreeSnapshot) -> ManagedRunRecord? {
+        let canonical = ManagedRunRecord.canonicalPath(worktree.path)
+        return managedRuns.first { $0.worktreePath == canonical }
+    }
+
+    func isManagedLaunchPending(_ worktree: WorktreeSnapshot) -> Bool {
+        guard worktree.instance?.isRunning != true,
+              let run = managedRun(for: worktree)
+        else { return false }
+        return Date().timeIntervalSince(run.launchedAt) <= 120
     }
 
     func kill(_ orphan: OrphanSnapshot) {
@@ -202,7 +252,7 @@ final class TownStore: ObservableObject {
     }
 
     @discardableResult
-    func executeNuke(confirmationText: String, deleteLocalBranch: Bool) async -> Bool {
+    func executeNuke(deleteLocalBranch: Bool) async -> Bool {
         guard let manifest = nukeManifest else { return false }
         isExecutingNuke = true
         nukeError = nil
@@ -212,7 +262,7 @@ final class TownStore: ObservableObject {
             let result = try await nuker.execute(
                 manifest: manifest,
                 repositoryPath: repositoryPath,
-                confirmationText: confirmationText,
+                confirmationText: manifest.confirmationText,
                 deleteLocalBranch: deleteLocalBranch
             )
             let removedCount = result.outcomes.filter { $0.disposition == .removed }.count
@@ -286,7 +336,6 @@ final class TownStore: ObservableObject {
 
     @discardableResult
     func executeBulkNuke(
-        confirmationText: String,
         deleteLocalBranches: Bool
     ) async -> Bool {
         let manifests = bulkNukeReviews.compactMap { review in
@@ -294,13 +343,6 @@ final class TownStore: ObservableObject {
         }
         guard !manifests.isEmpty else {
             bulkNukeError = "No selected worktree has a safe, executable deletion manifest."
-            return false
-        }
-        let expected = manifests.count == 1
-            ? "NUKE 1 WORKTREE"
-            : "NUKE \(manifests.count) WORKTREES"
-        guard confirmationText == expected else {
-            bulkNukeError = "The confirmation text does not match exactly."
             return false
         }
         guard deleteLocalBranches == bulkNukeDeletesLocalBranches else {
@@ -443,7 +485,189 @@ final class TownStore: ObservableObject {
         NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
-    func openTerminal(at path: String) {
+    func openOrFocusTerminal(for worktree: WorktreeSnapshot) {
+        Task {
+            if await terminalSessions.focusOwningTerminal(for: worktree) {
+                activityMessage = "Focused the Terminal tab that owns this stack."
+            } else {
+                openTerminal(at: worktree.path)
+            }
+        }
+    }
+
+    func requestLogs(_ worktree: WorktreeSnapshot) {
+        logWorktree = worktree
+        worktreeLogs = []
+        selectedLogID = nil
+        logError = nil
+        Task { await refreshLogs() }
+    }
+
+    func refreshLogs() async {
+        guard let worktree = logWorktree, !isRefreshingLogs else { return }
+        isRefreshingLogs = true
+        defer { isRefreshingLogs = false }
+        do {
+            let files = try await logReader.read(worktreePath: worktree.path)
+            guard logWorktree?.id == worktree.id else { return }
+            worktreeLogs = files
+            if selectedLogID == nil || !files.contains(where: { $0.id == selectedLogID }) {
+                selectedLogID = files.first?.id
+            }
+            logError = nil
+        } catch {
+            guard logWorktree?.id == worktree.id else { return }
+            logError = error.localizedDescription
+        }
+    }
+
+    func dismissLogs() {
+        logWorktree = nil
+        worktreeLogs = []
+        selectedLogID = nil
+        logError = nil
+        isRefreshingLogs = false
+    }
+
+    var selectedLog: WorktreeLogFile? {
+        worktreeLogs.first { $0.id == selectedLogID }
+    }
+
+    func requestConsole(_ worktree: WorktreeSnapshot) {
+        consoleWorktree = worktree
+        stackConsole = nil
+        consoleError = nil
+        Task { await refreshConsole() }
+    }
+
+    func refreshConsole() async {
+        guard let worktree = consoleWorktree, !isRefreshingConsole else { return }
+        isRefreshingConsole = true
+        defer { isRefreshingConsole = false }
+
+        do {
+            if let captured = try await consoleReader.read(worktreePath: worktree.path),
+               !captured.text.isEmpty {
+                guard consoleWorktree?.id == worktree.id else { return }
+                stackConsole = captured
+                consoleError = nil
+                return
+            }
+
+            if let terminalText = await terminalSessions.transcript(for: worktree) {
+                guard consoleWorktree?.id == worktree.id else { return }
+                stackConsole = StackConsoleSnapshot(
+                    source: .terminalScrollback,
+                    text: terminalText
+                )
+                consoleError = nil
+                return
+            }
+
+            guard consoleWorktree?.id == worktree.id else { return }
+            stackConsole = StackConsoleSnapshot(
+                source: .unavailable,
+                text: "No unified stack output is captured yet.\n\nStart or restart this worktree from Town Dock to capture the exact local-stack stream here."
+            )
+            consoleError = nil
+        } catch {
+            guard consoleWorktree?.id == worktree.id else { return }
+            consoleError = error.localizedDescription
+        }
+    }
+
+    func dismissConsole() {
+        consoleWorktree = nil
+        stackConsole = nil
+        consoleError = nil
+        isRefreshingConsole = false
+    }
+
+    func copyConsole() {
+        guard let text = stackConsole?.text, !text.isEmpty else { return }
+        copy(text)
+        activityMessage = "Copied the redacted stack console."
+    }
+
+    func copyLatestConsoleLines(_ count: Int = 200) {
+        guard let text = stackConsole?.text, !text.isEmpty else { return }
+        let lines = text.components(separatedBy: .newlines)
+        copy(lines.suffix(max(1, count)).joined(separator: "\n"))
+        activityMessage = "Copied the latest redacted console lines."
+    }
+
+    func requestConvexMaintenance(_ worktree: WorktreeSnapshot) {
+        convexWorktree = worktree
+        convexMaintenancePlan = nil
+        convexMaintenanceError = nil
+        Task { await prepareConvexMaintenance(action: .clearData) }
+    }
+
+    func prepareConvexMaintenance(action: ConvexMaintenanceAction) async {
+        guard let worktree = convexWorktree, !isExecutingConvexMaintenance else { return }
+        isPreparingConvexMaintenance = true
+        convexMaintenanceError = nil
+        let plan = await convexMaintenance.dryRun(worktree: worktree, action: action)
+        guard convexWorktree?.id == worktree.id else { return }
+        convexMaintenancePlan = plan
+        isPreparingConvexMaintenance = false
+    }
+
+    @discardableResult
+    func executeConvexMaintenance() async -> Bool {
+        guard let worktree = convexWorktree,
+              let plan = convexMaintenancePlan,
+              plan.canExecute,
+              !isExecutingConvexMaintenance
+        else { return false }
+        let key = operationKey("convex", worktree.id)
+        activeOperations.insert(key)
+        isExecutingConvexMaintenance = true
+        convexMaintenanceError = nil
+        defer {
+            activeOperations.remove(key)
+            isExecutingConvexMaintenance = false
+        }
+        do {
+            let result = try await convexMaintenance.execute(
+                plan: plan,
+                repositoryPath: repositoryPath
+            )
+            if let launcherPID = result.launcherPID,
+               let records = try? await managedRunRegistry.recordLaunch(
+                worktreePath: worktree.path,
+                instanceNumber: plan.instanceNumber,
+                launcherPID: launcherPID
+               ) {
+                managedRuns = records
+            }
+            activityMessage = result.message
+            convexWorktree = nil
+            convexMaintenancePlan = nil
+            await refresh()
+            return true
+        } catch {
+            convexMaintenanceError = error.localizedDescription
+            await refresh()
+            return false
+        }
+    }
+
+    func dismissConvexMaintenance() {
+        guard !isExecutingConvexMaintenance else { return }
+        convexWorktree = nil
+        convexMaintenancePlan = nil
+        convexMaintenanceError = nil
+        isPreparingConvexMaintenance = false
+    }
+
+    func revealLogs(for worktree: WorktreeSnapshot) {
+        let logs = URL(fileURLWithPath: worktree.path, isDirectory: true)
+            .appendingPathComponent("logs", isDirectory: true)
+        NSWorkspace.shared.activateFileViewerSelecting([logs])
+    }
+
+    private func openTerminal(at path: String) {
         let terminalURL = URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app")
         let folderURL = URL(fileURLWithPath: path, isDirectory: true)
         let configuration = NSWorkspace.OpenConfiguration()
@@ -487,5 +711,25 @@ final class TownStore: ObservableObject {
 
     private func operationKey(_ action: String, _ id: String) -> String {
         "\(action)|\(id)"
+    }
+
+    private func recordManagedLaunch(
+        _ result: ControlResult,
+        for worktree: WorktreeSnapshot
+    ) async {
+        guard let launcherPID = result.affectedProcessIDs.first else { return }
+        if let records = try? await managedRunRegistry.recordLaunch(
+            worktreePath: worktree.path,
+            instanceNumber: worktree.instance?.number,
+            launcherPID: launcherPID
+        ) {
+            managedRuns = records
+        }
+    }
+
+    private func forgetManagedLaunch(for worktree: WorktreeSnapshot) async {
+        if let records = try? await managedRunRegistry.remove(worktreePath: worktree.path) {
+            managedRuns = records
+        }
     }
 }

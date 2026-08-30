@@ -6,10 +6,12 @@ private final class NukeCommandFixture: @unchecked Sendable {
     let repository: URL
     let worktree: URL
     let head = "0123456789abcdef"
+    let prunable: Bool
     private let lock = NSLock()
     private var callCount = 0
 
-    init(primaryOnly: Bool = false) throws {
+    init(primaryOnly: Bool = false, prunable: Bool = false) throws {
+        self.prunable = prunable
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("TownDockNukeTests-\(UUID().uuidString)")
         repository = root.appendingPathComponent("town")
@@ -40,7 +42,15 @@ private final class NukeCommandFixture: @unchecked Sendable {
             return arguments[index + 1]
         }()
         let output: String
-        if arguments.contains("--show-toplevel") {
+        if arguments.contains("--show-toplevel"),
+           prunable,
+           commandDirectory == worktree.path {
+            return CommandResult(
+                stdout: "",
+                stderr: "fatal: not a git repository",
+                terminationStatus: 128
+            )
+        } else if arguments.contains("--show-toplevel") {
             output = commandDirectory
         } else if arguments.contains("--git-common-dir") {
             output = repository.appendingPathComponent(".git").path
@@ -52,7 +62,7 @@ private final class NukeCommandFixture: @unchecked Sendable {
             HEAD \(head)
             branch refs/heads/main
 
-            \(worktree.path == repository.path ? "" : "worktree \(worktree.path)\nHEAD \(head)\nbranch refs/heads/codex/test\n")
+            \(worktree.path == repository.path ? "" : "worktree \(worktree.path)\nHEAD \(head)\n\(prunable ? "detached\nprunable gitdir file points to non-existent location" : "branch refs/heads/codex/test")\n")
             """
         } else {
             XCTFail("Unexpected command: \(arguments)")
@@ -73,6 +83,24 @@ private final class NukeCommandFixture: @unchecked Sendable {
 }
 
 final class NukeTests: XCTestCase {
+    func testDockerMountParserAcceptsGoTemplateSpacing() {
+        XCTAssertTrue(dockerMountOutput(
+            "harness-electric-data-3 | /var/electric\n",
+            containsName: "harness-electric-data-3",
+            destination: "/var/electric"
+        ))
+        XCTAssertTrue(dockerMountOutput(
+            "harness-electric-data-3|/var/electric\n",
+            containsName: "harness-electric-data-3",
+            destination: "/var/electric"
+        ))
+        XCTAssertFalse(dockerMountOutput(
+            "harness-electric-data-8 | /var/electric\n",
+            containsName: "harness-electric-data-3",
+            destination: "/var/electric"
+        ))
+    }
+
     func testPrimaryCheckoutCanNeverProduceExecutableManifest() async throws {
         let fixture = try NukeCommandFixture(primaryOnly: true)
         defer { fixture.cleanup() }
@@ -195,6 +223,38 @@ final class NukeTests: XCTestCase {
 
         XCTAssertFalse(manifest.canExecute)
         XCTAssertTrue(manifest.warnings.contains { $0.contains("checkout-only deletion") })
+    }
+
+    func testPrunableRegistrationWithMissingGitLinkCanBuildDeletionManifest() async throws {
+        let fixture = try NukeCommandFixture(prunable: true)
+        defer { fixture.cleanup() }
+        let source = makeWorktree(path: fixture.worktree.path)
+        let stranded = WorktreeSnapshot(
+            path: source.path,
+            head: source.head,
+            branch: nil,
+            isDetached: true,
+            isPrimary: false,
+            isLocked: false,
+            isPrunable: true,
+            gitStatus: source.gitStatus,
+            instance: nil,
+            health: nil,
+            setupComplete: false
+        )
+
+        let manifest = try await makeEngine(fixture).dryRun(
+            worktree: stranded,
+            repositoryPath: fixture.repository.path
+        )
+
+        XCTAssertTrue(manifest.canExecute)
+        XCTAssertTrue(manifest.targets.contains {
+            $0.kind == .worktreeDirectory && $0.actionable
+        })
+        XCTAssertTrue(manifest.targets.contains {
+            $0.kind == .gitRegistration && $0.actionable
+        })
     }
 
     func testManifestIncludesOnlyPerInstanceDockerResourcesAndObservedBucket() async throws {

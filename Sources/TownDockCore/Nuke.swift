@@ -43,6 +43,26 @@ public struct NukeExecutionResult: Codable, Hashable, Sendable {
 
 typealias FreshSnapshotProvider = @Sendable (_ repositoryPath: String) async throws -> TownSnapshot
 
+/// Docker's Go-template `println` inserts spaces between arguments. Parse the
+/// fields instead of comparing its raw output so `name | destination` and
+/// `name|destination` are treated identically without weakening either check.
+func dockerMountOutput(
+    _ output: String,
+    containsName expectedName: String,
+    destination expectedDestination: String
+) -> Bool {
+    output.split(whereSeparator: \.isNewline).contains { row in
+        let fields = row.split(
+            separator: "|",
+            maxSplits: 1,
+            omittingEmptySubsequences: false
+        )
+        guard fields.count == 2 else { return false }
+        return fields[0].trimmingCharacters(in: .whitespaces) == expectedName
+            && fields[1].trimmingCharacters(in: .whitespaces) == expectedDestination
+    }
+}
+
 /// Builds and executes a frozen, reviewable worktree deletion manifest.
 ///
 /// `execute` is intentionally strict: the exact confirmation string, branch
@@ -422,6 +442,10 @@ public actor NukeEngine {
         }
         try await registry.record(snapshot: currentSnapshot)
 
+        if identity.isPrunable {
+            try repairPrunableWorktree(identity, expectedHead: currentWorktree.head)
+        }
+
         var outcomes: [NukeTargetOutcome] = []
         if currentWorktree.instance?.isRunning == true {
             _ = try await controlEngine.stop(currentWorktree)
@@ -697,6 +721,14 @@ public actor NukeEngine {
         let path: String
         let repositoryPath: String
         let isPrimary: Bool
+        let isPrunable: Bool
+    }
+
+    private struct GitRegistration {
+        let path: String
+        let head: String
+        let branch: String?
+        let isPrunable: Bool
     }
 
     private func revalidateFreshOwnership(
@@ -720,6 +752,7 @@ public actor NukeEngine {
         guard !current.isPrimary,
               current.head == manifest.worktree.head,
               current.branch == manifest.worktree.branch,
+              current.isPrunable == manifest.worktree.isPrunable,
               current.gitStatus == manifest.worktree.gitStatus,
               current.setupComplete == manifest.worktree.setupComplete
         else {
@@ -870,37 +903,17 @@ public actor NukeEngine {
             throw TownDockError.repositoryNotFound("The worktree directory no longer exists.")
         }
 
-        let topLevel = try gitOutput(["-C", path, "rev-parse", "--show-toplevel"])
-        guard canonicalPath(topLevel) == path else {
-            throw TownDockError.staleSnapshot("The target path is no longer this Git worktree.")
-        }
         let repositoryTop = try gitOutput(["-C", repository, "rev-parse", "--show-toplevel"])
         guard canonicalPath(repositoryTop) == repository else {
             throw TownDockError.repositoryNotFound("The configured Town repository is invalid.")
         }
-
-        let common = try gitOutput([
-            "-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir",
-        ])
         let repositoryCommon = try gitOutput([
             "-C", repository, "rev-parse", "--path-format=absolute", "--git-common-dir",
         ])
-        guard canonicalPath(common) == canonicalPath(repositoryCommon) else {
-            throw TownDockError.unsafeOperation(
-                "The selected worktree belongs to a different Git repository."
-            )
-        }
-
-        let head = try gitOutput(["-C", path, "rev-parse", "HEAD"])
-        guard head == worktree.head else {
-            throw TownDockError.staleSnapshot(
-                "The worktree HEAD changed after discovery. Refresh the deletion manifest."
-            )
-        }
 
         let list = try gitOutput(["-C", repository, "worktree", "list", "--porcelain"])
         let records = parseWorktreeRecords(list)
-        guard records.contains(where: { canonicalPath($0.path) == path }) else {
+        guard let record = records.first(where: { canonicalPath($0.path) == path }) else {
             throw TownDockError.staleSnapshot("Git no longer registers this worktree.")
         }
         guard let first = records.first else {
@@ -909,8 +922,7 @@ public actor NukeEngine {
         let primaryPath = canonicalPath(first.path)
 
         if let branch = worktree.branch {
-            guard let record = records.first(where: { canonicalPath($0.path) == path }),
-                  record.branch == branch || record.branch == "refs/heads/\(branch)"
+            guard record.branch == branch || record.branch == "refs/heads/\(branch)"
             else {
                 throw TownDockError.staleSnapshot(
                     "The worktree branch changed after discovery. Refresh the deletion manifest."
@@ -918,7 +930,66 @@ public actor NukeEngine {
             }
         }
 
-        return GitIdentity(path: path, repositoryPath: repository, isPrimary: path == primaryPath)
+        let topLevelResult = try runCommand(
+            .git,
+            ["-C", path, "rev-parse", "--show-toplevel"],
+            nil,
+            [0, 128]
+        )
+        if topLevelResult.terminationStatus == 0 {
+            guard canonicalPath(topLevelResult.stdout.trimmingCharacters(in: .whitespacesAndNewlines)) == path else {
+                throw TownDockError.staleSnapshot("The target path is no longer this Git worktree.")
+            }
+            let common = try gitOutput([
+                "-C", path, "rev-parse", "--path-format=absolute", "--git-common-dir",
+            ])
+            guard canonicalPath(common) == canonicalPath(repositoryCommon) else {
+                throw TownDockError.unsafeOperation(
+                    "The selected worktree belongs to a different Git repository."
+                )
+            }
+            let head = try gitOutput(["-C", path, "rev-parse", "HEAD"])
+            guard head == worktree.head else {
+                throw TownDockError.staleSnapshot(
+                    "The worktree HEAD changed after discovery. Refresh the deletion manifest."
+                )
+            }
+            return GitIdentity(
+                path: path,
+                repositoryPath: repository,
+                isPrimary: path == primaryPath,
+                isPrunable: false
+            )
+        }
+
+        // Git can retain an exact, prunable registration after a checkout's
+        // `.git` link is accidentally removed. The repository registration is
+        // still authoritative enough to review deletion, provided its path and
+        // HEAD exactly match discovery. Execution repairs and revalidates that
+        // link before any resource is mutated.
+        let dotGit = URL(fileURLWithPath: path, isDirectory: true)
+            .appendingPathComponent(".git", isDirectory: false)
+        guard worktree.isPrunable,
+              record.isPrunable,
+              record.head == worktree.head,
+              !FileManager.default.fileExists(atPath: dotGit.path)
+        else {
+            throw TownDockError.staleSnapshot(
+                "The target is no longer a valid or safely repairable Git worktree."
+            )
+        }
+        let values = try URL(fileURLWithPath: path, isDirectory: true)
+            .resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        guard values.isDirectory == true, values.isSymbolicLink != true else {
+            throw TownDockError.unsafeOperation("Refusing a non-directory or symbolic-link worktree path.")
+        }
+
+        return GitIdentity(
+            path: path,
+            repositoryPath: repository,
+            isPrimary: path == primaryPath,
+            isPrunable: true
+        )
     }
 
     private func gitOutput(_ arguments: [String]) throws -> String {
@@ -926,18 +997,73 @@ public actor NukeEngine {
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func parseWorktreeRecords(_ output: String) -> [(path: String, branch: String?)] {
+    private func repairPrunableWorktree(
+        _ identity: GitIdentity,
+        expectedHead: String
+    ) throws {
+        let dotGit = URL(fileURLWithPath: identity.path, isDirectory: true)
+            .appendingPathComponent(".git", isDirectory: false)
+        guard !FileManager.default.fileExists(atPath: dotGit.path) else {
+            throw TownDockError.staleSnapshot(
+                "The broken worktree's .git link changed after review. Nothing was deleted."
+            )
+        }
+
+        // Git 2.5x may return status 1 while still repairing a missing link, so
+        // the verified postconditions below—not the exit code—decide success.
+        _ = try runCommand(
+            .git,
+            ["-C", identity.repositoryPath, "worktree", "repair", identity.path],
+            nil,
+            [0, 1]
+        )
+
+        let values = try dotGit.resourceValues(forKeys: [
+            .isRegularFileKey, .isSymbolicLinkKey,
+        ])
+        guard values.isRegularFile == true, values.isSymbolicLink != true else {
+            throw TownDockError.commandFailed(
+                "Git could not restore the broken worktree link. Nothing was deleted."
+            )
+        }
+        let topLevel = try gitOutput(["-C", identity.path, "rev-parse", "--show-toplevel"])
+        let common = try gitOutput([
+            "-C", identity.path, "rev-parse", "--path-format=absolute", "--git-common-dir",
+        ])
+        let repositoryCommon = try gitOutput([
+            "-C", identity.repositoryPath, "rev-parse", "--path-format=absolute", "--git-common-dir",
+        ])
+        let head = try gitOutput(["-C", identity.path, "rev-parse", "HEAD"])
+        guard canonicalPath(topLevel) == identity.path,
+              canonicalPath(common) == canonicalPath(repositoryCommon),
+              head == expectedHead
+        else {
+            throw TownDockError.unsafeOperation(
+                "The repaired worktree does not match the reviewed repository and HEAD. Nothing was deleted."
+            )
+        }
+    }
+
+    private func parseWorktreeRecords(_ output: String) -> [GitRegistration] {
         output.components(separatedBy: "\n\n").compactMap { block in
             var path: String?
+            var head = ""
             var branch: String?
+            var isPrunable = false
             for line in block.split(whereSeparator: \.isNewline).map(String.init) {
                 if line.hasPrefix("worktree ") {
                     path = String(line.dropFirst("worktree ".count))
+                } else if line.hasPrefix("HEAD ") {
+                    head = String(line.dropFirst("HEAD ".count))
                 } else if line.hasPrefix("branch ") {
                     branch = String(line.dropFirst("branch ".count))
+                } else if line == "prunable" || line.hasPrefix("prunable ") {
+                    isPrunable = true
                 }
             }
-            return path.map { ($0, branch) }
+            return path.map {
+                GitRegistration(path: $0, head: head, branch: branch, isPrunable: isPrunable)
+            }
         }
     }
 
@@ -1018,9 +1144,11 @@ public actor NukeEngine {
             nil,
             [0]
         ).stdout
-        guard mounts.split(whereSeparator: \.isNewline).contains(where: {
-            $0 == "harness-electric-data-\(number)|/var/electric"
-        }) else {
+        guard dockerMountOutput(
+            mounts,
+            containsName: "harness-electric-data-\(number)",
+            destination: "/var/electric"
+        ) else {
             throw TownDockError.unsafeOperation(
                 "The Electric container does not mount the expected per-instance volume."
             )

@@ -9,7 +9,8 @@ struct BulkNukeSheet: View {
     @State private var criteria = BulkNukeCriteria()
     @State private var selectedIDs: Set<String> = []
     @State private var deleteLocalBranches = false
-    @State private var confirmationText = ""
+    @State private var deletionAcknowledged = false
+    @State private var showingFinalConfirmation = false
 
     private enum Step {
         case criteria
@@ -36,12 +37,6 @@ struct BulkNukeSheet: View {
 
     private var blockedReviews: [BulkNukeReview] {
         store.bulkNukeReviews.filter { !$0.canExecute }
-    }
-
-    private var confirmationPhrase: String {
-        executableReviews.count == 1
-            ? "NUKE 1 WORKTREE"
-            : "NUKE \(executableReviews.count) WORKTREES"
     }
 
     var body: some View {
@@ -71,8 +66,23 @@ struct BulkNukeSheet: View {
         .interactiveDismissDisabled(store.isExecutingBulkNuke)
         .onAppear { selectAllMatches() }
         .onChange(of: criteria) { _, _ in
-            confirmationText = ""
+            deletionAcknowledged = false
             selectAllMatches()
+        }
+        .alert(
+            "Nuke \(executableReviews.count) Worktree\(executableReviews.count == 1 ? "" : "s")?",
+            isPresented: $showingFinalConfirmation
+        ) {
+            Button("Cancel", role: .cancel) {}
+            Button("Nuke Worktrees", role: .destructive) {
+                Task {
+                    if await store.executeBulkNuke(deleteLocalBranches: deleteLocalBranches) {
+                        dismiss()
+                    }
+                }
+            }
+        } message: {
+            Text("This permanently deletes every Ready checkout, all untracked files beneath them, attributed processes, and verified local storage. Operations stop on the first safety failure.")
         }
         .onDisappear {
             if !store.isExecutingBulkNuke { store.dismissBulkNuke() }
@@ -260,16 +270,16 @@ struct BulkNukeSheet: View {
                         Text("This permanently deletes each Ready worktree, its untracked files, attributed processes, and verified local storage. Operations run one at a time and stop on the first safety failure.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                        HStack(spacing: 3) {
-                            Text("Type")
-                            Text(confirmationPhrase)
-                                .font(.subheadline.monospaced().weight(.bold))
-                            Text("to confirm")
+                        Toggle(isOn: $deletionAcknowledged) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("I understand these deletions are permanent")
+                                    .font(.subheadline.weight(.medium))
+                                Text("You will see one final confirmation before anything is deleted.")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         }
-                        .font(.subheadline)
-                        TextField(confirmationPhrase, text: $confirmationText)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.body.monospaced())
+                            .toggleStyle(.checkbox)
                             .disabled(store.isExecutingBulkNuke)
                     }
                     .padding(14)
@@ -297,7 +307,7 @@ struct BulkNukeSheet: View {
         HStack {
             if step == .review, !store.isExecutingBulkNuke {
                 Button("Back") {
-                    confirmationText = ""
+                    deletionAcknowledged = false
                     step = .criteria
                 }
             }
@@ -330,7 +340,7 @@ struct BulkNukeSheet: View {
                 Button("Review \(selectedIDs.count) Worktree\(selectedIDs.count == 1 ? "" : "s")") {
                     let selected = selectedWorktrees
                     step = .review
-                    confirmationText = ""
+                    deletionAcknowledged = false
                     Task {
                         await store.prepareBulkNuke(
                             worktrees: selected,
@@ -342,14 +352,7 @@ struct BulkNukeSheet: View {
                 .disabled(selectedIDs.isEmpty)
             } else {
                 Button(role: .destructive) {
-                    Task {
-                        if await store.executeBulkNuke(
-                            confirmationText: confirmationText,
-                            deleteLocalBranches: deleteLocalBranches
-                        ) {
-                            dismiss()
-                        }
-                    }
+                    showingFinalConfirmation = true
                 } label: {
                     if store.isExecutingBulkNuke {
                         Text("Nuking…")
@@ -360,12 +363,11 @@ struct BulkNukeSheet: View {
                         )
                     }
                 }
-                .keyboardShortcut(.defaultAction)
                 .disabled(
                     store.isPreparingBulkNuke
                         || store.isExecutingBulkNuke
                         || executableReviews.isEmpty
-                        || confirmationText != confirmationPhrase
+                        || !deletionAcknowledged
                 )
             }
         }

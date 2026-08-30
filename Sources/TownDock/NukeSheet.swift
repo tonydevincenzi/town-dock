@@ -7,14 +7,11 @@ struct NukeSheet: View {
 
     let worktree: WorktreeSnapshot
 
-    @State private var confirmationText = ""
+    @State private var deletionAcknowledged = false
+    @State private var showingFinalConfirmation = false
     @State private var deleteLocalBranch = false
 
     private var manifest: NukeManifest? { store.nukeManifest }
-    private var confirmationMatches: Bool {
-        guard let manifest else { return false }
-        return confirmationText == manifest.confirmationText
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -51,8 +48,20 @@ struct NukeSheet: View {
         .tint(TownTheme.accent)
         .interactiveDismissDisabled(store.isExecutingNuke)
         .onChange(of: deleteLocalBranch) { _, newValue in
-            confirmationText = ""
+            deletionAcknowledged = false
             Task { await store.prepareNuke(deleteLocalBranch: newValue) }
+        }
+        .alert("Nuke \(worktree.displayName)?", isPresented: $showingFinalConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Nuke Worktree", role: .destructive) {
+                Task {
+                    if await store.executeNuke(deleteLocalBranch: deleteLocalBranch) {
+                        dismiss()
+                    }
+                }
+            }
+        } message: {
+            Text("This permanently deletes the checkout, every untracked file beneath it, attributed processes, and verified local storage. This cannot be undone.")
         }
         .onDisappear {
             if !store.isExecutingNuke { store.dismissNuke() }
@@ -192,16 +201,16 @@ struct NukeSheet: View {
 
             Divider()
 
-            HStack(spacing: 3) {
-                Text("Type")
-                Text(manifest.confirmationText)
-                    .font(.subheadline.monospaced().weight(.bold))
-                Text("to confirm")
+            Toggle(isOn: $deletionAcknowledged) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("I understand this deletion is permanent")
+                        .font(.subheadline.weight(.medium))
+                    Text("You will see one final confirmation before anything is deleted.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
-            .font(.subheadline)
-            TextField(manifest.confirmationText, text: $confirmationText)
-                .textFieldStyle(.roundedBorder)
-                .font(.body.monospaced())
+                .toggleStyle(.checkbox)
                 .disabled(store.isExecutingNuke || !manifest.canExecute)
         }
         .padding(14)
@@ -253,14 +262,7 @@ struct NukeSheet: View {
             .disabled(store.isExecutingNuke)
 
             Button(role: .destructive) {
-                Task {
-                    if await store.executeNuke(
-                        confirmationText: confirmationText,
-                        deleteLocalBranch: deleteLocalBranch
-                    ) {
-                        dismiss()
-                    }
-                }
+                showingFinalConfirmation = true
             } label: {
                 if store.isExecutingNuke {
                     HStack(spacing: 7) {
@@ -271,10 +273,9 @@ struct NukeSheet: View {
                     Label("Nuke Worktree", systemImage: "trash.slash.fill")
                 }
             }
-            .keyboardShortcut(.defaultAction)
             .townTooltip("Stop attributed processes and permanently delete the selected worktree resources.")
             .disabled(
-                !confirmationMatches
+                !deletionAcknowledged
                     || manifest?.canExecute != true
                     || store.isPreparingNuke
                     || store.isExecutingNuke

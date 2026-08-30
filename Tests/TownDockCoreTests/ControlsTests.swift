@@ -82,10 +82,11 @@ final class ControlsTests: XCTestCase {
         XCTAssertFalse(anchored.contains(unrelated.pid))
     }
 
-    func testStartUsesDirectMiseArgumentsAndPinnedInstance() async throws {
+    func testStartUsesPTYCaptureAndPinnedMiseInstance() async throws {
         let directory = try makeWorktreeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let recorder = ControlInvocationRecorder()
+        let consoleRoot = directory.appendingPathComponent("captures")
         let worktree = makeWorktree(
             path: directory.path,
             instance: makeInstance(number: 3, processes: [], services: [])
@@ -102,7 +103,8 @@ final class ControlsTests: XCTestCase {
             launchProcess: { executable, arguments, cwd in
                 recorder.recordLaunch(executable, arguments, cwd)
                 return 9_001
-            }
+            },
+            consoleRoot: consoleRoot
         )
 
         let result = try await engine.start(worktree)
@@ -110,9 +112,27 @@ final class ControlsTests: XCTestCase {
         XCTAssertEqual(result.action, .start)
         XCTAssertEqual(result.affectedProcessIDs, [9_001])
         let launch = try XCTUnwrap(recorder.launchSnapshot().first)
-        XCTAssertEqual(launch.0.path, directory.appendingPathComponent("mise").path)
-        XCTAssertEqual(launch.1, ["run", "local-stack", "--", "-n", "3"])
+        XCTAssertEqual(launch.0.path, "/usr/bin/script")
+        XCTAssertEqual(
+            launch.1,
+            [
+                "-q", "-F", "-t", "0",
+                StackConsoleCapture.captureURL(
+                    for: directory.path,
+                    rootDirectory: consoleRoot
+                ).path,
+                directory.appendingPathComponent("mise").path,
+                "run", "local-stack", "--", "-n", "3",
+            ]
+        )
         XCTAssertEqual(launch.2.path, directory.path)
+        let attributes = try FileManager.default.attributesOfItem(
+            atPath: StackConsoleCapture.captureURL(
+                for: directory.path,
+                rootDirectory: consoleRoot
+            ).path
+        )
+        XCTAssertEqual((attributes[.posixPermissions] as? NSNumber)?.intValue, 0o600)
     }
 
     func testForceKillRevalidatesIdentityAndStateDirectoryOwnership() async throws {
