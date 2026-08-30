@@ -18,7 +18,7 @@ enum TownDockProbe {
             try await registry.record(snapshot: discovered)
             let snapshot = await registry.enrich(snapshot: discovered)
 
-            print("Town Dock read-only probe")
+            print("Town Sheriff read-only probe")
             print("worktrees=\(snapshot.worktrees.count) orphans=\(snapshot.orphans.count) warnings=\(snapshot.warnings.count)")
             for worktree in snapshot.worktrees {
                 let label = worktree.branch ?? URL(fileURLWithPath: worktree.path).lastPathComponent
@@ -69,7 +69,7 @@ enum TownDockProbe {
                 print("nuke-preview \(label) executable=\(manifest.canExecute) targets=\(manifest.targets.count) warnings=\(manifest.warnings.count)")
             }
         } catch {
-            FileHandle.standardError.write(Data("Town Dock probe failed: \(error.localizedDescription)\n".utf8))
+            FileHandle.standardError.write(Data("Town Sheriff probe failed: \(error.localizedDescription)\n".utf8))
             Foundation.exit(EXIT_FAILURE)
         }
     }

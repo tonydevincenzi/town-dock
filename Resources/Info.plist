@@ -5,17 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Town Dock</string>
+    <string>Town Sheriff</string>
     <key>CFBundleExecutable</key>
     <string>TownDock</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.tony.towndock</string>
 	<key>CFBundleIconFile</key>
-	<string>TownDock</string>
+	<string>TownSheriff</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Town Dock</string>
+    <string>Town Sheriff</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
@@ -27,7 +27,7 @@
     <key>LSUIElement</key>
     <false/>
     <key>NSAppleEventsUsageDescription</key>
-	<string>Town Dock uses Terminal to focus a stack tab and show its local-stack output.</string>
+	<string>Town Sheriff uses Terminal to focus a stack tab and show its local-stack output.</string>
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSHumanReadableCopyright</key>

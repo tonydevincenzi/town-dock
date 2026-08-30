@@ -21,7 +21,7 @@ struct MenuBarView: View {
                         ProgressView()
                         Text("Scanning Town…")
                     } else {
-                        PhosphorStackIcon(color: .secondary)
+                        PhosphorShieldStarIcon(color: .secondary)
                             .frame(width: 24, height: 24)
                             .foregroundStyle(.secondary)
                         Text("No worktrees found")
@@ -83,13 +83,13 @@ struct MenuBarView: View {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(Color.white.opacity(0.09))
-                PhosphorStackIcon()
+                PhosphorShieldStarIcon()
                     .padding(7)
             }
             .frame(width: 34, height: 34)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Town Dock")
+                Text("Town Sheriff")
                     .font(.headline)
                 Text("\(store.runningWorktreeCount) running · \(store.snapshot.worktrees.count) worktrees")
                     .font(.caption)
@@ -115,7 +115,7 @@ struct MenuBarView: View {
     private var footer: some View {
         VStack(spacing: 9) {
             HStack {
-                Button("Open Town Dock") { showDashboard() }
+                Button("Open Town Sheriff") { showDashboard() }
                     .keyboardShortcut("o")
                 Spacer()
                 Text("v\(appVersion)")
@@ -126,7 +126,7 @@ struct MenuBarView: View {
                     updatesEnabled ? "Check for Updates…" : "Update status…",
                     action: checkForUpdatesAction
                 )
-                .townTooltip(updatesEnabled ? "Check for a newer Town Dock release" : "Show why updates are unavailable")
+                .townTooltip(updatesEnabled ? "Check for a newer Town Sheriff release" : "Show why updates are unavailable")
                 Spacer()
                 Button("Quit") { NSApplication.shared.terminate(nil) }
                     .keyboardShortcut("q")

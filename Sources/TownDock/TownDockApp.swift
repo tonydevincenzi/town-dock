@@ -73,10 +73,10 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
         button.target = self
         button.action = #selector(togglePopover(_:))
         button.sendAction(on: [.leftMouseUp, .rightMouseUp])
-        button.toolTip = "Town Dock"
-        button.title = " Town"
+        button.toolTip = "Town Sheriff"
+        button.title = " Town Sheriff"
         button.imageScaling = .scaleProportionallyDown
-        button.setAccessibilityLabel("Town Dock")
+        button.setAccessibilityLabel("Town Sheriff")
         statusItem.isVisible = true
     }
 
@@ -105,7 +105,7 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
 
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
-        button.image = TownDockIcon.menuBarImage()
+        button.image = TownSheriffIcon.menuBarImage()
     }
 
     private func checkForUpdates() {
@@ -113,7 +113,7 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
             let alert = NSAlert()
             alert.alertStyle = .informational
             alert.messageText = "Updates aren’t configured in this build"
-            alert.informativeText = "This is a local development build of Town Dock. Automatic updates become available in Developer ID-signed releases published with an update feed."
+            alert.informativeText = "This is a local development build of Town Sheriff. Automatic updates become available in Developer ID-signed releases published with an update feed."
             alert.addButton(withTitle: "OK")
             alert.runModal()
             return
@@ -142,7 +142,7 @@ final class TownDockAppDelegate: NSObject, NSApplicationDelegate, NSWindowDelega
                 backing: .buffered,
                 defer: false
             )
-            window.title = "Town Dock"
+            window.title = "Town Sheriff"
             window.minSize = NSSize(width: 920, height: 620)
             window.isReleasedWhenClosed = false
             window.delegate = self

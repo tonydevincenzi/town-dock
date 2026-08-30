@@ -5,7 +5,7 @@ import Darwin
 import Glibc
 #endif
 
-/// Executables used by Town Dock's read-only discovery pass.
+/// Executables used by Town Sheriff's read-only discovery pass.
 ///
 /// Keeping this list closed prevents repository text from becoming an executable
 /// name. `CommandRunner` also invokes the executable directly; it never passes

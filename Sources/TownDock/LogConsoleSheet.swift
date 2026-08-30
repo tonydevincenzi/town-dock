@@ -186,7 +186,7 @@ struct LogConsoleSheet: View {
             ContentUnavailableView(
                 "No service logs",
                 systemImage: "text.alignleft",
-                description: Text("Town Dock will show bounded live output when this worktree creates logs/*.log.")
+                description: Text("Town Sheriff will show bounded live output when this worktree creates logs/*.log.")
             )
         }
     }

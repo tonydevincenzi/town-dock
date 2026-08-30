@@ -37,7 +37,7 @@ struct StackConsoleSheet: View {
             Button("Restart & Capture") { store.restart(worktree) }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("This briefly stops the current local stack, then relaunches the same instance through Town Dock’s recorder.")
+            Text("This briefly stops the current local stack, then relaunches the same instance through Town Sheriff’s recorder.")
         }
     }
 
@@ -99,7 +99,7 @@ struct StackConsoleSheet: View {
             ContentUnavailableView {
                 Label("No captured console yet", systemImage: "terminal")
             } description: {
-                Text("Start or restart this worktree through Town Dock to capture its exact local-stack stream.")
+                Text("Start or restart this worktree through Town Sheriff to capture its exact local-stack stream.")
             } actions: {
                 Button(worktree.instance?.isRunning == true ? "Restart & Capture…" : "Start & Capture") {
                     if worktree.instance?.isRunning == true {
@@ -164,7 +164,7 @@ struct StackConsoleSheet: View {
             Label("Secrets are redacted before display and copy", systemImage: "checkmark.shield")
                 .font(.caption)
                 .foregroundStyle(TownTheme.muted)
-                .townTooltip("Town Dock masks common tokens, credentials, admin keys, passwords, and private keys in this view.")
+                .townTooltip("Town Sheriff masks common tokens, credentials, admin keys, passwords, and private keys in this view.")
         }
         .font(.caption)
         .padding(.horizontal, 16)

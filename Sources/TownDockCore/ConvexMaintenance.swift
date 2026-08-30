@@ -100,7 +100,7 @@ public actor ConvexMaintenanceEngine {
             return blockedPlan(
                 worktree: worktree,
                 action: action,
-                warning: "Town Dock could not attribute a Convex instance to this worktree."
+                warning: "Town Sheriff could not attribute a Convex instance to this worktree."
             )
         }
         guard (1...9).contains(instance.number),

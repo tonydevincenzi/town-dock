@@ -289,6 +289,6 @@ struct ConvexMaintenanceSheet: View {
     private var finalMessage: String {
         action == .clearData
             ? "Every application and Agent component table in this worktree’s pinned local Convex instance will be emptied. This cannot be undone."
-            : "Town Dock will stop this worktree’s stack, delete its verified Convex state, and launch a fresh instance on the same ports. This cannot be undone."
+            : "Town Sheriff will stop this worktree’s stack, delete its verified Convex state, and launch a fresh instance on the same ports. This cannot be undone."
     }
 }

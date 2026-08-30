@@ -11,7 +11,7 @@ FEED_URL="${TOWN_DOCK_FEED_URL:-}"
 DOWNLOAD_PREFIX="${TOWN_DOCK_DOWNLOAD_URL_PREFIX:-}"
 NOTARY_PROFILE="${TOWN_DOCK_NOTARY_PROFILE:-TownDock}"
 UPDATES_DIR="$PROJECT_DIR/dist/updates"
-ARCHIVE_NAME="Town-Dock-$VERSION.zip"
+ARCHIVE_NAME="Town-Sheriff-$VERSION.zip"
 ARCHIVE_PATH="$UPDATES_DIR/$ARCHIVE_NAME"
 SPARKLE_TOOLS="$PROJECT_DIR/.build/artifacts/sparkle/Sparkle/bin"
 
@@ -41,17 +41,17 @@ TOWN_DOCK_UNIVERSAL=1 \
   "$SCRIPT_DIR/package-app.sh" release
 
 mkdir -p "$UPDATES_DIR"
-find "$UPDATES_DIR" -maxdepth 1 -type f -name 'Town-Dock-*.zip' -delete
-ditto -c -k --sequesterRsrc --keepParent "dist/Town Dock.app" "$ARCHIVE_PATH"
+find "$UPDATES_DIR" -maxdepth 1 -type f -name 'Town-Sheriff-*.zip' -delete
+ditto -c -k --sequesterRsrc --keepParent "dist/Town Sheriff.app" "$ARCHIVE_PATH"
 
 xcrun notarytool submit "$ARCHIVE_PATH" \
   --keychain-profile "$NOTARY_PROFILE" \
   --wait
-xcrun stapler staple "dist/Town Dock.app"
-xcrun stapler validate "dist/Town Dock.app"
+xcrun stapler staple "dist/Town Sheriff.app"
+xcrun stapler validate "dist/Town Sheriff.app"
 
 # Rebuild the archive so the distributed app contains its stapled ticket.
-ditto -c -k --sequesterRsrc --keepParent "dist/Town Dock.app" "$ARCHIVE_PATH"
+ditto -c -k --sequesterRsrc --keepParent "dist/Town Sheriff.app" "$ARCHIVE_PATH"
 
 "$SPARKLE_TOOLS/generate_appcast" \
   --account com.tony.towndock \

@@ -248,7 +248,7 @@ extension ServiceState {
         case .running: "Running and accepting connections."
         case .degraded: "Running, but one or more health checks are failing or incomplete."
         case .stopped: "Not currently running or listening on its expected port."
-        case .unknown: "Town Dock could not determine the current service state."
+        case .unknown: "Town Sheriff could not determine the current service state."
         }
     }
 }
@@ -268,7 +268,7 @@ extension AttributionConfidence {
         case .certain: "Ownership is verified by exact process, path, or registry evidence."
         case .high: "Ownership is supported by multiple strong signals and is safe to act on."
         case .inferred: "Ownership is likely but based on indirect evidence; destructive actions are restricted."
-        case .ambiguous: "Ownership cannot be established safely; Town Dock will not delete or kill it automatically."
+        case .ambiguous: "Ownership cannot be established safely; Town Sheriff will not delete or kill it automatically."
         }
     }
 }

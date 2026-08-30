@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 CONFIGURATION="${1:-release}"
-APP_DIR="$PROJECT_DIR/dist/Town Dock.app"
+APP_DIR="$PROJECT_DIR/dist/Town Sheriff.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
@@ -50,7 +50,7 @@ fi
 cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$PROJECT_DIR/Resources/Phosphor-LICENSE.txt" "$RESOURCES_DIR/Phosphor-LICENSE.txt"
 ditto "$BIN_DIR/Sparkle.framework" "$FRAMEWORKS_DIR/Sparkle.framework"
-swift "$PROJECT_DIR/scripts/generate-app-icon.swift" "$RESOURCES_DIR/TownDock.icns"
+swift "$PROJECT_DIR/scripts/generate-app-icon.swift" "$RESOURCES_DIR/TownSheriff.icns"
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS_DIR/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" "$CONTENTS_DIR/Info.plist"
@@ -88,4 +88,4 @@ fi
 
 codesign --verify --deep --strict "$APP_DIR"
 
-printf 'Packaged Town Dock %s (%s) at %s\n' "$VERSION" "$BUILD_NUMBER" "$APP_DIR"
+printf 'Packaged Town Sheriff %s (%s) at %s\n' "$VERSION" "$BUILD_NUMBER" "$APP_DIR"

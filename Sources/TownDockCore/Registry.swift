@@ -36,7 +36,7 @@ public struct WorktreeRegistryRecord: Identifiable, Codable, Hashable, Sendable 
 ///
 /// `.local-convex-services.md` is deleted after a clean stop and instance
 /// numbers are reusable, so stopped state cannot safely be attributed from
-/// repository files alone. Town Dock records only associations it observed
+/// repository files alone. Town Sheriff records only associations it observed
 /// with high-confidence evidence; destructive code must still revalidate them.
 public actor TownRegistry {
     private let fileURL: URL
@@ -166,7 +166,7 @@ public actor TownRegistry {
                     number: number,
                     confidence: .high,
                     evidence: [
-                        "Town Dock previously observed this exact worktree, instance, state path, and bucket while it was live.",
+                        "Town Sheriff previously observed this exact worktree, instance, state path, and bucket while it was live.",
                     ],
                     services: expectedServices(for: number),
                     processes: [],

@@ -7,7 +7,7 @@ public enum StackConsoleSource: String, Codable, Hashable, Sendable {
 
     public var displayName: String {
         switch self {
-        case .managedCapture: "Town Dock capture"
+        case .managedCapture: "Town Sheriff capture"
         case .terminalScrollback: "Terminal scrollback"
         case .unavailable: "No capture"
         }

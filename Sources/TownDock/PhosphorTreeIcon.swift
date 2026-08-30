@@ -1,71 +1,38 @@
 import AppKit
 import SwiftUI
 
-/// Phosphor Icons' bold `stack` glyph, adapted to native drawing.
+/// Phosphor Icons' bold `shield-star` glyph.
 /// Source: https://github.com/phosphor-icons/core (MIT)
-struct PhosphorStackIcon: View {
+struct PhosphorShieldStarIcon: View {
     var color: Color = .primary
 
     var body: some View {
-        Canvas { context, size in
-            let scale = min(size.width, size.height) / 256
-            let offset = CGPoint(
-                x: (size.width - 256 * scale) / 2,
-                y: (size.height - 256 * scale) / 2
-            )
-
-            func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
-                CGPoint(x: offset.x + x * scale, y: offset.y + y * scale)
-            }
-
-            let layers = [
-                [point(32, 80), point(128, 24), point(224, 80), point(128, 136), point(32, 80)],
-                [point(32, 128), point(128, 184), point(224, 128)],
-                [point(32, 176), point(128, 232), point(224, 176)],
-            ]
-            for layer in layers {
-                var path = Path()
-                path.move(to: layer[0])
-                for point in layer.dropFirst() { path.addLine(to: point) }
-                context.stroke(
-                    path,
-                    with: .color(color),
-                    style: StrokeStyle(lineWidth: 24 * scale, lineCap: .round, lineJoin: .round)
-                )
-            }
-        }
+        Image(nsImage: TownSheriffIcon.symbolImage())
+            .resizable()
+            .renderingMode(.template)
+            .foregroundStyle(color)
         .aspectRatio(1, contentMode: .fit)
         .accessibilityHidden(true)
     }
 }
 
-enum TownDockIcon {
-    static func menuBarImage() -> NSImage {
-        let image = NSImage(size: NSSize(width: 19, height: 19), flipped: false) { rect in
-            NSColor.black.setStroke()
-            let scale = min(rect.width, rect.height) / 256
-            let transform = NSAffineTransform()
-            transform.translateX(by: (rect.width - 256 * scale) / 2, yBy: (rect.height - 256 * scale) / 2)
-            transform.scale(by: scale)
+enum TownSheriffIcon {
+    private static let shieldStarSVG = """
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="#000"><path d="M76.86,115.54a12,12,0,0,1,15.6-6.68L116,118.28V96a12,12,0,0,1,24,0v22.28l23.54-9.42a12,12,0,0,1,8.92,22.28L147,141.33,161.6,160.8a12,12,0,1,1-19.2,14.4L128,156l-14.4,19.2a12,12,0,1,1-19.2-14.4L109,141.33,83.54,131.14A12,12,0,0,1,76.86,115.54ZM228,56v56c0,54.29-26.32,87.22-48.4,105.29-23.71,19.39-47.44,26-48.44,26.29a12.1,12.1,0,0,1-6.32,0c-1-.28-24.73-6.9-48.44-26.29C54.32,199.22,28,166.29,28,112V56A20,20,0,0,1,48,36H208A20,20,0,0,1,228,56Zm-24,4H52v52c0,35.71,13.09,64.69,38.91,86.15A126.14,126.14,0,0,0,128,219.38a126.28,126.28,0,0,0,37.09-21.23C190.91,176.69,204,147.71,204,112Z"/></svg>
+    """
 
-            for layer in [
-                [NSPoint(x: 32, y: 176), NSPoint(x: 128, y: 232), NSPoint(x: 224, y: 176), NSPoint(x: 128, y: 120), NSPoint(x: 32, y: 176)],
-                [NSPoint(x: 32, y: 128), NSPoint(x: 128, y: 72), NSPoint(x: 224, y: 128)],
-                [NSPoint(x: 32, y: 80), NSPoint(x: 128, y: 24), NSPoint(x: 224, y: 80)],
-            ] {
-                let path = NSBezierPath()
-                path.move(to: layer[0])
-                for point in layer.dropFirst() { path.line(to: point) }
-                path.transform(using: transform as AffineTransform)
-                path.lineWidth = 24 * scale
-                path.lineCapStyle = .round
-                path.lineJoinStyle = .round
-                path.stroke()
-            }
-            return true
-        }
+    static func symbolImage() -> NSImage {
+        let image = NSImage(data: Data(shieldStarSVG.utf8)) ?? NSImage()
         image.isTemplate = true
-        image.accessibilityDescription = "Town Dock"
+        image.accessibilityDescription = "Town Sheriff"
+        return image
+    }
+
+    static func menuBarImage() -> NSImage {
+        let image = symbolImage()
+        image.size = NSSize(width: 19, height: 19)
+        image.isTemplate = true
+        image.accessibilityDescription = "Town Sheriff"
         return image
     }
 }

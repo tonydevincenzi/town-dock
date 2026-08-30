@@ -141,12 +141,12 @@ public actor NukeEngine {
         if instance == nil, worktree.setupComplete {
             hasBlockingAmbiguity = true
             warnings.append(
-                "This provisioned worktree has no freshly attributable instance. Town Dock will not perform a checkout-only deletion that could strand its storage."
+                "This provisioned worktree has no freshly attributable instance. Town Sheriff will not perform a checkout-only deletion that could strand its storage."
             )
         }
 
         if identity.isPrimary || worktree.isPrimary {
-            warnings.append("The primary checkout can be reset, but it can never be deleted by Town Dock.")
+            warnings.append("The primary checkout can be reset, but it can never be deleted by Town Sheriff.")
         }
         if worktree.gitStatus.isDirty {
             warnings.append(
@@ -293,7 +293,7 @@ public actor NukeEngine {
                     )
                 )
                 warnings.append(
-                    "The actual MinIO bucket was not observed; Town Dock will not guess from the instance number."
+                    "The actual MinIO bucket was not observed; Town Sheriff will not guess from the instance number."
                 )
             }
 

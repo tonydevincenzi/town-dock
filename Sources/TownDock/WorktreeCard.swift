@@ -61,7 +61,7 @@ struct WorktreeCard: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Town Dock will terminate the attributed process tree. Files and local storage are not removed.")
+            Text("Town Sheriff will terminate the attributed process tree. Files and local storage are not removed.")
         }
     }
 
@@ -178,7 +178,7 @@ struct WorktreeCard: View {
             }
             .buttonStyle(LinearButtonStyle(emphasized: true))
             .disabled(true)
-            .townTooltip("Town Dock launched this stack and is waiting for its services to become ready.")
+            .townTooltip("Town Sheriff launched this stack and is waiting for its services to become ready.")
         } else if !isRunning {
             Button {
                 store.start(worktree)
@@ -253,12 +253,12 @@ struct WorktreeCard: View {
 
             if let managedRun {
                 Label(
-                    "Managed by Town Dock · started \(managedRun.launchedAt.relativeLabel)",
+                    "Managed by Town Sheriff · started \(managedRun.launchedAt.relativeLabel)",
                     systemImage: "switch.2"
                 )
                 .font(.caption)
                 .foregroundStyle(TownTheme.muted)
-                .townTooltip("Town Dock launched this stack and can rediscover it after the app restarts.")
+                .townTooltip("Town Sheriff launched this stack and can rediscover it after the app restarts.")
             }
 
             if let health = worktree.health,
@@ -424,7 +424,7 @@ struct WorktreeCard: View {
         case "DIRTY": "This worktree has modified, staged, or untracked files that have not been committed."
         case "DEGRADED": "The stack is running, but one or more service health checks are failing or incomplete."
         case "INCOMPLETE": "Required worktree setup has not completed, so some controls or service data may be unavailable."
-        case "MANAGED": "Town Dock launched this stack and remembers it across app restarts."
+        case "MANAGED": "Town Sheriff launched this stack and remembers it across app restarts."
         case "PRIMARY": "This is the repository's main checkout rather than a linked Git worktree."
         default: text
         }

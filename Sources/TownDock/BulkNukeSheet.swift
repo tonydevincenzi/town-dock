@@ -253,7 +253,7 @@ struct BulkNukeSheet: View {
 
                 if !blockedReviews.isEmpty {
                     Label(
-                        "Blocked worktrees are excluded automatically; Town Dock will only delete the \(executableReviews.count) worktrees marked Ready.",
+                        "Blocked worktrees are excluded automatically; Town Sheriff will only delete the \(executableReviews.count) worktrees marked Ready.",
                         systemImage: "shield.fill"
                     )
                     .font(.caption)

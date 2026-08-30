@@ -576,7 +576,7 @@ final class TownStore: ObservableObject {
             guard consoleWorktree?.id == worktree.id else { return }
             stackConsole = StackConsoleSnapshot(
                 source: .unavailable,
-                text: "No unified stack output is captured yet.\n\nStart or restart this worktree from Town Dock to capture the exact local-stack stream here."
+                text: "No unified stack output is captured yet.\n\nStart or restart this worktree from Town Sheriff to capture the exact local-stack stream here."
             )
             consoleError = nil
         } catch {

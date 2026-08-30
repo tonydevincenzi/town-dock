@@ -89,7 +89,7 @@ struct OrphanCleanupSheet: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("\(actionableTargets.count) verified targets")
                         .font(.headline)
-                    Text("Town Dock will revalidate every reviewed target before the first change. Newly discovered targets are never added silently.")
+                    Text("Town Sheriff will revalidate every reviewed target before the first change. Newly discovered targets are never added silently.")
                         .font(.caption)
                         .foregroundStyle(TownTheme.muted)
                 }
@@ -282,7 +282,7 @@ private struct OrphanCleanupTargetRow: View {
             [
                 target.actionable
                     ? "Verified target that will be permanently removed after confirmation."
-                    : "Excluded because Town Dock cannot safely prove ownership.",
+                    : "Excluded because Town Sheriff cannot safely prove ownership.",
                 target.note,
             ]
             .compactMap { $0 }

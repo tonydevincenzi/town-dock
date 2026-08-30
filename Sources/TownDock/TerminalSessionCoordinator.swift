@@ -4,7 +4,7 @@ import TownDockCore
 
 actor TerminalSessionCoordinator {
     /// Focuses the Terminal.app tab that owns any process in the worktree's
-    /// stack. Detached Town Dock launches have no TTY and intentionally return
+    /// stack. Detached Town Sheriff launches have no TTY and intentionally return
     /// false so the caller can open a fresh shell instead.
     func focusOwningTerminal(for worktree: WorktreeSnapshot) -> Bool {
         guard !NSRunningApplication.runningApplications(
@@ -20,7 +20,7 @@ actor TerminalSessionCoordinator {
     }
 
     /// Returns the visible history from the Terminal tab that owns this stack.
-    /// This is a fallback for stacks started manually before Town Dock began
+    /// This is a fallback for stacks started manually before Town Sheriff began
     /// capturing its own pseudo-terminal transcript.
     func transcript(for worktree: WorktreeSnapshot) -> String? {
         guard !NSRunningApplication.runningApplications(

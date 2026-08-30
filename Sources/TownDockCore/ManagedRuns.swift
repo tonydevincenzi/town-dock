@@ -42,7 +42,7 @@ public struct ManagedRunRecord: Identifiable, Codable, Hashable, Sendable {
 }
 
 /// Stores only process identity metadata—never command output, arguments, or
-/// environment values—so Town Dock can recognize stacks it launched after the
+/// environment values—so Town Sheriff can recognize stacks it launched after the
 /// app itself restarts.
 public actor ManagedRunRegistry {
     private let storageURL: URL

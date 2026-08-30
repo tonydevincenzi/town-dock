@@ -94,7 +94,7 @@ public actor TownControlEngine {
     }
 
     /// Starts Town's sanctioned local-stack task in a detached pseudo-terminal.
-    /// The owner-only transcript lets Town Dock display the same unified stream
+    /// The owner-only transcript lets Town Sheriff display the same unified stream
     /// as an interactive launch; values are redacted before they reach the UI.
     public func start(_ worktree: WorktreeSnapshot) async throws -> ControlResult {
         try launch(worktree, allowPreviouslyRunning: false, action: .start)

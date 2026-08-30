@@ -23,7 +23,7 @@ struct DashboardView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .toolbar { toolbar }
-        .navigationTitle("Town Dock")
+        .navigationTitle("Town Sheriff")
         .preferredColorScheme(.dark)
         .tint(TownTheme.accent)
         .sheet(item: $store.nukeWorktree) { worktree in
@@ -64,11 +64,11 @@ struct DashboardView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(Color.black.opacity(0.22))
-                    PhosphorStackIcon()
+                    PhosphorShieldStarIcon()
                         .padding(6)
                 }
                 .frame(width: 30, height: 30)
-                Text("Town Dock")
+                Text("Town Sheriff")
                     .font(.system(size: 15, weight: .medium))
                 Spacer()
                 StatusDot(
@@ -311,7 +311,7 @@ private struct WorktreesDashboard: View {
                 if store.snapshot.worktrees.isEmpty, !store.isRefreshing {
                     EmptySectionView(
                         title: "No worktrees found",
-                        detail: "Town Dock searched \(store.repositoryPath). Set TOWN_REPOSITORY_PATH before launching to use another checkout.",
+                        detail: "Town Sheriff searched \(store.repositoryPath). Set TOWN_REPOSITORY_PATH before launching to use another checkout.",
                         symbol: "arrow.triangle.branch"
                     )
                 }
@@ -439,7 +439,7 @@ private struct OrphanCard: View {
                         .townTooltip(
                             canKill
                                 ? "Kill the verified orphan process tree"
-                                : "Town Dock will not kill processes with ambiguous ownership"
+                                : "Town Sheriff will not kill processes with ambiguous ownership"
                         )
                     }
                 }
@@ -475,7 +475,7 @@ private struct OrphanCard: View {
                         Text("\(orphan.processes.count) attributed processes")
                     }
                     .font(.caption.weight(.medium))
-                    .townTooltip("Processes Town Dock attributes to this orphan using working-directory and process-tree evidence.")
+                    .townTooltip("Processes Town Sheriff attributes to this orphan using working-directory and process-tree evidence.")
                 }
             }
         }

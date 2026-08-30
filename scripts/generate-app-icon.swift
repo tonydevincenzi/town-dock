@@ -11,8 +11,8 @@ guard CommandLine.arguments.count == 2 else {
 let outputURL = URL(fileURLWithPath: CommandLine.arguments[1])
 let fileManager = FileManager.default
 let temporaryRoot = fileManager.temporaryDirectory
-    .appendingPathComponent("town-dock-icon-\(UUID().uuidString)", isDirectory: true)
-let iconsetURL = temporaryRoot.appendingPathComponent("TownDock.iconset", isDirectory: true)
+    .appendingPathComponent("town-sheriff-icon-\(UUID().uuidString)", isDirectory: true)
+let iconsetURL = temporaryRoot.appendingPathComponent("TownSheriff.iconset", isDirectory: true)
 try fileManager.createDirectory(at: iconsetURL, withIntermediateDirectories: true)
 defer {
     if ProcessInfo.processInfo.environment["KEEP_TOWN_ICONSET"] == nil {
@@ -35,7 +35,7 @@ func drawIcon(pixelSize: Int, to url: URL) throws {
         bytesPerRow: 0,
         bitsPerPixel: 0
     ) else {
-        throw NSError(domain: "TownDockIcon", code: 1)
+        throw NSError(domain: "TownSheriffIcon", code: 1)
     }
 
     bitmap.size = NSSize(width: pixelSize, height: pixelSize)
@@ -68,33 +68,25 @@ func drawIcon(pixelSize: Int, to url: URL) throws {
     background.lineWidth = max(1, side * 0.008)
     background.stroke()
 
-    let glyphSide = side * 0.57
+    let glyphSide = side * 0.60
     let glyphOrigin = (side - glyphSide) / 2
-    let scale = glyphSide / 256
-    let transform = NSAffineTransform()
-    transform.translateX(by: glyphOrigin, yBy: glyphOrigin)
-    transform.scale(by: scale)
-
-    NSColor.white.setStroke()
-    for layer in [
-        [NSPoint(x: 32, y: 176), NSPoint(x: 128, y: 232), NSPoint(x: 224, y: 176), NSPoint(x: 128, y: 120), NSPoint(x: 32, y: 176)],
-        [NSPoint(x: 32, y: 128), NSPoint(x: 128, y: 72), NSPoint(x: 224, y: 128)],
-        [NSPoint(x: 32, y: 80), NSPoint(x: 128, y: 24), NSPoint(x: 224, y: 80)],
-    ] {
-        let path = NSBezierPath()
-        path.move(to: layer[0])
-        for point in layer.dropFirst() { path.line(to: point) }
-        path.transform(using: transform as AffineTransform)
-        path.lineWidth = 24 * scale
-        path.lineCapStyle = .round
-        path.lineJoinStyle = .round
-        path.stroke()
+    let shieldStarSVG = """
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="#fff"><path d="M76.86,115.54a12,12,0,0,1,15.6-6.68L116,118.28V96a12,12,0,0,1,24,0v22.28l23.54-9.42a12,12,0,0,1,8.92,22.28L147,141.33,161.6,160.8a12,12,0,1,1-19.2,14.4L128,156l-14.4,19.2a12,12,0,1,1-19.2-14.4L109,141.33,83.54,131.14A12,12,0,0,1,76.86,115.54ZM228,56v56c0,54.29-26.32,87.22-48.4,105.29-23.71,19.39-47.44,26-48.44,26.29a12.1,12.1,0,0,1-6.32,0c-1-.28-24.73-6.9-48.44-26.29C54.32,199.22,28,166.29,28,112V56A20,20,0,0,1,48,36H208A20,20,0,0,1,228,56Zm-24,4H52v52c0,35.71,13.09,64.69,38.91,86.15A126.14,126.14,0,0,0,128,219.38a126.28,126.28,0,0,0,37.09-21.23C190.91,176.69,204,147.71,204,112Z"/></svg>
+    """
+    guard let glyph = NSImage(data: Data(shieldStarSVG.utf8)) else {
+        throw NSError(domain: "TownSheriffIcon", code: 2)
     }
+    glyph.draw(
+        in: NSRect(x: glyphOrigin, y: glyphOrigin, width: glyphSide, height: glyphSide),
+        from: .zero,
+        operation: .sourceOver,
+        fraction: 1
+    )
     NSGraphicsContext.current?.restoreGraphicsState()
     NSGraphicsContext.restoreGraphicsState()
 
     guard let png = bitmap.representation(using: .png, properties: [:]) else {
-        throw NSError(domain: "TownDockIcon", code: 2)
+        throw NSError(domain: "TownSheriffIcon", code: 3)
     }
     try png.write(to: url)
 }

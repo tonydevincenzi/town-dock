@@ -1,6 +1,6 @@
-# Town Dock
+# Town Sheriff
 
-Town Dock is a native macOS menu-bar utility for managing Town development
+Town Sheriff is a native macOS menu-bar utility for managing Town development
 worktrees, their local service graphs, and orphaned processes/storage.
 
 ## What it shows
@@ -17,7 +17,7 @@ worktrees, their local service graphs, and orphaned processes/storage.
 - Open frontend/service URLs in Google Chrome
 - Reveal a worktree in Finder or open it in Terminal
 - Start, stop, restart, or force-kill a worktree's verified service graph
-- Reconnect to stacks launched by Town Dock after the app restarts
+- Reconnect to stacks launched by Town Sheriff after the app restarts
 - Open a selectable, redacted console for the unified `mise run local-stack` output
 - Follow bounded, live tails of each worktree's existing `logs/*.log` files
 - Focus the Terminal.app tab that owns a manually launched stack when available
@@ -26,18 +26,18 @@ worktrees, their local service graphs, and orphaned processes/storage.
 - Safely repair and remove stranded prunable worktrees whose `.git` link is missing
 - Keep local branch deletion as a separate, explicit checkbox
 
-Town Dock never displays raw Town backend arguments or the full
+Town Sheriff never displays raw Town backend arguments or the full
 `.local-convex-services.md`, because both may contain credentials.
 
 ## Build
 
 ```bash
 ./scripts/package-app.sh
-open "dist/Town Dock.app"
+open "dist/Town Sheriff.app"
 ```
 
-Local packages are ad-hoc signed. Click the Stack icon in the menu bar for the
-compact view, or choose **Open Town Dock** for the full dashboard. Set
+Local packages are ad-hoc signed. Click the Sheriff badge in the menu bar for the
+compact view, or choose **Open Town Sheriff** for the full dashboard. Set
 `TOWN_REPOSITORY_PATH` before launching if Town moves from `~/Developer/town`.
 
 Parser, control, registry, and nuke tests live under `Tests/`. This Mac's
@@ -56,7 +56,7 @@ The source of truth for the public version is [`VERSION`](VERSION). Release
 builds use that value for `CFBundleShortVersionString` and a monotonically
 increasing build number for `CFBundleVersion`.
 
-Town Dock embeds Sparkle 2.9.6. A distribution build includes a **Check for
+Town Sheriff embeds Sparkle 2.9.6. A distribution build includes a **Check for
 Updates…** command and automatically checks the signed update feed once per
 day. Updates can be downloaded and installed automatically after the user
 grants Sparkle permission. Local builds leave the command disabled because
