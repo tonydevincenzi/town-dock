@@ -76,17 +76,8 @@ struct WorktreeCard: View {
                         .font(.system(size: 14, weight: .medium))
                         .lineLimit(1)
 
-                    if worktree.gitStatus.isDirty {
-                        badge("DIRTY", tint: .gray)
-                    }
-                    if worktree.health?.overall == .degraded {
-                        badge("DEGRADED", tint: .orange)
-                    }
-                    if !worktree.setupComplete {
-                        badge("INCOMPLETE", tint: .orange)
-                    }
-                    if managedRun != nil {
-                        badge("MANAGED", tint: .gray)
+                    if !worktree.setupComplete, !visibleServices.isEmpty {
+                        badge("SETUP", tint: .orange)
                     }
                     if worktree.isLocked {
                         Image(systemName: "lock.fill")
@@ -104,13 +95,6 @@ struct WorktreeCard: View {
                 ProgressView()
                     .controlSize(.small)
             }
-
-            Button {
-                store.requestConsole(worktree)
-            } label: {
-                Label("Console", systemImage: "terminal")
-            }
-            .buttonStyle(LinearButtonStyle())
 
             primaryAction
             overflowMenu
@@ -422,6 +406,7 @@ struct WorktreeCard: View {
         case "DIRTY": "This worktree has modified, staged, or untracked files that have not been committed."
         case "DEGRADED": "The stack is running, but one or more service health checks are failing or incomplete."
         case "INCOMPLETE": "Required worktree setup has not completed, so some controls or service data may be unavailable."
+        case "SETUP": "Required worktree setup has not completed, so some controls or service data may be unavailable."
         case "MANAGED": "Town Sheriff launched this stack and remembers it across app restarts."
         case "PRIMARY": "This is the repository's main checkout rather than a linked Git worktree."
         default: text
@@ -479,21 +464,13 @@ private struct CompactPortChip: View {
     }
 
     private var chipLabel: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 5) {
-                StatusDot(state: service.state, size: 6)
-                Text(service.kind.displayName)
-                    .lineLimit(1)
-                Text(":\(service.port)")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-            if let resourceSummary = service.compactResourceSummary {
-                Text(resourceSummary)
-                    .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundStyle(TownTheme.muted)
-                    .lineLimit(1)
-            }
+        HStack(spacing: 5) {
+            StatusDot(state: service.state, size: 6)
+            Text(service.kind.displayName)
+                .lineLimit(1)
+            Text(":\(service.port)")
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
         }
         .font(.caption2.weight(.medium))
         .padding(.horizontal, 7)

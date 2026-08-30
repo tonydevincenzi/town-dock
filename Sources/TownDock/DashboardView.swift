@@ -270,22 +270,24 @@ private struct WorktreesDashboard: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .center, spacing: 12) {
                     SectionHeader(
-                        "Town worktrees",
-                        subtitle: "Live services, Git state, and controls for every checkout",
+                        "Worktrees",
                         symbol: "arrow.triangle.branch",
                         count: store.snapshot.worktrees.count
                     )
 
                     WorktreeResourceRollup(usage: store.snapshot.worktreeResourceUsage)
 
-                    Button(role: .destructive) {
-                        store.requestBulkNuke()
+                    Menu {
+                        Button("Bulk remove worktrees…", systemImage: "trash.slash", role: .destructive) {
+                            store.requestBulkNuke()
+                        }
+                        .disabled(store.snapshot.worktrees.allSatisfy(\.isPrimary))
                     } label: {
-                        Label("Bulk Nuke…", systemImage: "trash.slash")
+                        Label("Manage", systemImage: "ellipsis.circle")
                     }
-                    .buttonStyle(LinearButtonStyle(destructive: true))
-                    .disabled(store.snapshot.worktrees.allSatisfy(\.isPrimary))
-                    .townTooltip("Select and permanently remove multiple non-primary worktrees.")
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .townTooltip("Worktree maintenance and bulk removal.")
                 }
                 .padding(.bottom, 4)
 
