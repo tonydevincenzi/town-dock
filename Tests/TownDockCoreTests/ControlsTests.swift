@@ -213,6 +213,55 @@ final class ControlsTests: XCTestCase {
         XCTAssertEqual(recorder.signalSnapshot().map(\.1), [SIGKILL])
     }
 
+    func testOrphanKillAcceptsDiscoveredUnderscoreStartToken() async throws {
+        let recorder = ControlInvocationRecorder()
+        let missingPath = "/tmp/deleted-town-worktree"
+        let process = ProcessIdentity(
+            pid: 4_242,
+            parentPID: 1,
+            processGroupID: 4_200,
+            startToken: "Sat_Aug_29_13:00:00_2026",
+            command: "convex-local-backend",
+            workingDirectory: missingPath
+        )
+        let orphan = OrphanSnapshot(
+            id: "deleted-worktree-3",
+            kind: .deletedWorktree,
+            title: "Deleted worktree instance 3",
+            missingPath: missingPath,
+            instanceNumber: 3,
+            confidence: .certain,
+            reasons: ["The worktree directory disappeared."],
+            processes: [process]
+        )
+        let engine = TownControlEngine(
+            runCommand: { tool, arguments, _, _ in
+                if tool == .ps {
+                    return CommandResult(
+                        stdout: "Sat Aug 29 13:00:00 2026 4200\n",
+                        stderr: "",
+                        terminationStatus: 0
+                    )
+                }
+                if arguments.contains("cwd") {
+                    return CommandResult(
+                        stdout: "p4242\nfcwd\nn\(missingPath) (deleted)\n",
+                        stderr: "",
+                        terminationStatus: 0
+                    )
+                }
+                return CommandResult(stdout: "", stderr: "", terminationStatus: 1)
+            },
+            sendSignal: { pid, signal in recorder.recordSignal(pid, signal) }
+        )
+
+        let result = try await engine.killOrphan(orphan)
+
+        XCTAssertEqual(result.affectedProcessIDs, [4_242])
+        XCTAssertEqual(recorder.signalSnapshot().map(\.0), [4_242])
+        XCTAssertEqual(recorder.signalSnapshot().map(\.1), [SIGTERM, SIGKILL])
+    }
+
     func testAmbiguousOrphanIsRefusedWithoutSendingSignals() async throws {
         let recorder = ControlInvocationRecorder()
         let engine = TownControlEngine(

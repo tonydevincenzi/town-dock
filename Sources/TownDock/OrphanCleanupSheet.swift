@@ -4,15 +4,11 @@ import TownDockCore
 struct OrphanCleanupSheet: View {
     @EnvironmentObject private var store: TownStore
     @Environment(\.dismiss) private var dismiss
-    @State private var confirmationText = ""
+    @State private var deletionAcknowledged = false
 
     private var manifest: OrphanCleanupManifest? { store.orphanCleanupManifest }
     private var actionableTargets: [DestructiveTarget] {
         manifest?.targets.filter { $0.actionable && $0.selectedByDefault } ?? []
-    }
-    private var confirmationMatches: Bool {
-        guard let manifest else { return false }
-        return confirmationText == manifest.confirmationText
     }
 
     var body: some View {
@@ -138,20 +134,17 @@ struct OrphanCleanupSheet: View {
             }
         }
 
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 4) {
-                Text("Type")
-                Text(manifest.confirmationText)
-                    .font(.subheadline.monospaced().weight(.bold))
-                Text("to confirm permanent cleanup")
+        Toggle(isOn: $deletionAcknowledged) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Permanently delete these verified orphan resources")
+                    .font(.subheadline.weight(.semibold))
+                Text("This removes the listed processes and local storage and cannot be undone.")
+                    .font(.caption)
+                    .foregroundStyle(TownTheme.muted)
             }
-            .font(.subheadline)
-
-            TextField(manifest.confirmationText, text: $confirmationText)
-                .textFieldStyle(.roundedBorder)
-                .font(.body.monospaced())
-                .disabled(store.isExecutingOrphanCleanup || !manifest.canExecute)
         }
+        .toggleStyle(.checkbox)
+        .disabled(store.isExecutingOrphanCleanup || !manifest.canExecute)
         .padding(14)
         .background(Color.red.opacity(0.045), in: RoundedRectangle(cornerRadius: 9))
         .overlay {
@@ -176,7 +169,7 @@ struct OrphanCleanupSheet: View {
                     .foregroundStyle(TownTheme.muted)
                     .textSelection(.enabled)
                 Button("Build Fresh Manifest") {
-                    confirmationText = ""
+                    deletionAcknowledged = false
                     Task { await store.prepareOrphanCleanup() }
                 }
                 .buttonStyle(LinearButtonStyle())
@@ -203,7 +196,7 @@ struct OrphanCleanupSheet: View {
 
             Button(role: .destructive) {
                 Task {
-                    if await store.executeOrphanCleanup(confirmationText: confirmationText) {
+                    if await store.executeOrphanCleanup() {
                         dismiss()
                     }
                 }
@@ -221,7 +214,7 @@ struct OrphanCleanupSheet: View {
             .townTooltip("Permanently remove every verified target shown in this cleanup manifest.")
             .disabled(
                 store.isExecutingOrphanCleanup
-                    || !confirmationMatches
+                    || !deletionAcknowledged
                     || manifest?.canExecute != true
             )
         }

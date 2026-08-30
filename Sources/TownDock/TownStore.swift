@@ -411,7 +411,7 @@ final class TownStore: ObservableObject {
     }
 
     @discardableResult
-    func executeOrphanCleanup(confirmationText: String) async -> Bool {
+    func executeOrphanCleanup() async -> Bool {
         guard let manifest = orphanCleanupManifest else { return false }
         isExecutingOrphanCleanup = true
         orphanCleanupError = nil
@@ -421,7 +421,7 @@ final class TownStore: ObservableObject {
             let result = try await nuker.executeOrphanCleanup(
                 manifest: manifest,
                 repositoryPath: repositoryPath,
-                confirmationText: confirmationText
+                confirmationText: manifest.confirmationText
             )
             let removed = result.outcomes.filter { $0.disposition == .removed }.count
             let absent = result.outcomes.filter { $0.disposition == .alreadyAbsent }.count

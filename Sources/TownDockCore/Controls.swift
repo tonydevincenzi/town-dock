@@ -402,7 +402,7 @@ public actor TownControlEngine {
         guard result.terminationStatus == 0,
               let current = parseProcessStartAndGroup(result.stdout),
               current.groupID == process.processGroupID,
-              normalizeWhitespace(current.startToken) == normalizeWhitespace(process.startToken),
+              normalizeStartToken(current.startToken) == normalizeStartToken(process.startToken),
               let cwd = try currentWorkingDirectory(of: process.pid),
               ownershipRoots.contains(where: { path(cwd, isInside: $0) })
         else {
@@ -537,6 +537,14 @@ public actor TownControlEngine {
 
     private func normalizeWhitespace(_ value: String) -> String {
         value.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// Discovery serializes `ps` start times with underscores so they remain a
+    /// stable, single-field identity token. Revalidation reads the same value
+    /// directly from `ps`, which returns spaces. Compare their canonical forms
+    /// without weakening the PID, process-group, or cwd ownership checks.
+    private func normalizeStartToken(_ value: String) -> String {
+        normalizeWhitespace(value.replacingOccurrences(of: "_", with: " "))
     }
 
     fileprivate static func defaultLauncher(
