@@ -600,6 +600,13 @@ public actor TownControlEngine {
         }
         environment["PATH"] = safePath
         environment["LC_ALL"] = "C"
+        // `/usr/bin/script` gives the stack a PTY, but our detached launcher has
+        // no parent terminal from which to inherit these values. Supply the same
+        // capabilities as a normal modern Terminal session so CLI tools retain
+        // their colors and interactive rendering in Town Sheriff's console.
+        environment["TERM"] = "xterm-256color"
+        environment["COLORTERM"] = "truecolor"
+        environment["CLICOLOR"] = "1"
         process.environment = environment
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice

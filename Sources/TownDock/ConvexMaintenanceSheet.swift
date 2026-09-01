@@ -12,6 +12,29 @@ struct ConvexMaintenanceSheet: View {
     @State private var showingFinalConfirmation = false
 
     private var plan: ConvexMaintenancePlan? { store.convexMaintenancePlan }
+    private var dashboardService: ServiceSnapshot? {
+        worktree.instance?.services.first { $0.kind == .convexDashboard }
+    }
+    private var convexDashboardURL: URL? {
+        guard let instance = worktree.instance,
+              let dashboardURL = dashboardService?.url,
+              let backend = instance.services.first(where: { $0.kind == .convexBackend }),
+              var components = URLComponents(url: dashboardURL, resolvingAgainstBaseURL: false)
+        else { return nil }
+
+        components.queryItems = [
+            URLQueryItem(name: "d", value: "instance-\(instance.number)"),
+            URLQueryItem(
+                name: "deploymentUrl",
+                value: "http://127.0.0.1:\(backend.port)"
+            ),
+        ]
+        return components.url
+    }
+    private var isDashboardRunning: Bool {
+        guard let state = dashboardService?.state else { return false }
+        return state == .running || state == .degraded
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -89,6 +112,17 @@ struct ConvexMaintenanceSheet: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+
+            if let convexDashboardURL {
+                Button {
+                    store.openInChrome(convexDashboardURL)
+                } label: {
+                    Label("Open Dashboard", systemImage: "arrow.up.right")
+                }
+                .buttonStyle(LinearButtonStyle())
+                .disabled(!isDashboardRunning || store.isExecutingConvexMaintenance)
+            }
+
             Button {
                 store.dismissConvexMaintenance()
                 dismiss()

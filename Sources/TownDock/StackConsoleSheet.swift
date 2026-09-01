@@ -114,18 +114,20 @@ struct StackConsoleSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(red: 0.035, green: 0.039, blue: 0.045))
         } else if let snapshot = store.stackConsole {
-            ScrollView([.horizontal, .vertical]) {
-                Text(snapshot.text.isEmpty ? "Waiting for local-stack output…" : snapshot.text)
-                    .font(.system(size: 11.5, weight: .regular, design: .monospaced))
-                    .foregroundStyle(Color(red: 0.83, green: 0.85, blue: 0.88))
-                    .lineSpacing(2)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: true, vertical: true)
-                    .padding(18)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            if let transcript = snapshot.rawTranscript, !transcript.isEmpty {
+                TerminalTranscriptView(transcript: transcript)
+                    .background(Color(red: 0.035, green: 0.039, blue: 0.045))
+            } else {
+                VStack {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("Waiting for local-stack output…")
+                        .font(.caption)
+                        .foregroundStyle(TownTheme.muted)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color(red: 0.035, green: 0.039, blue: 0.045))
             }
-            .defaultScrollAnchor(.bottom)
-            .background(Color(red: 0.035, green: 0.039, blue: 0.045))
         } else {
             VStack {
                 ProgressView()
@@ -158,10 +160,10 @@ struct StackConsoleSheet: View {
 
             Spacer()
 
-            Label("Secrets are redacted before display and copy", systemImage: "checkmark.shield")
+            Label("Terminal-faithful view · copies are redacted", systemImage: "checkmark.shield")
                 .font(.caption)
                 .foregroundStyle(TownTheme.muted)
-                .townTooltip("Town Sheriff masks common tokens, credentials, admin keys, passwords, and private keys in this view.")
+                .townTooltip("The terminal view preserves the local PTY output. Copy actions mask common tokens, credentials, admin keys, passwords, and private keys.")
         }
         .font(.caption)
         .padding(.horizontal, 16)

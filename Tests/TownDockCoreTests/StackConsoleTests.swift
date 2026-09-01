@@ -40,6 +40,10 @@ final class StackConsoleTests: XCTestCase {
 
         XCTAssertEqual(snapshot?.source, .managedCapture)
         XCTAssertEqual(snapshot?.text, "old line\nnew line\n")
+        XCTAssertEqual(
+            snapshot?.rawTranscript,
+            Data("old line\nnew \u{001B}[31mline\u{001B}[0m\n".utf8)
+        )
         XCTAssertEqual(snapshot?.path, capture.path)
     }
 }

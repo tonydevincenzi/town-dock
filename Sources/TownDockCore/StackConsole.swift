@@ -17,6 +17,9 @@ public enum StackConsoleSource: String, Codable, Hashable, Sendable {
 public struct StackConsoleSnapshot: Codable, Hashable, Sendable {
     public let source: StackConsoleSource
     public let text: String
+    /// The original PTY bytes used for terminal-faithful rendering. This stays
+    /// local to the app; copy actions continue to use the redacted `text`.
+    public let rawTranscript: Data?
     public let path: String?
     public let modifiedAt: Date?
     public let isTruncated: Bool
@@ -24,12 +27,14 @@ public struct StackConsoleSnapshot: Codable, Hashable, Sendable {
     public init(
         source: StackConsoleSource,
         text: String,
+        rawTranscript: Data? = nil,
         path: String? = nil,
         modifiedAt: Date? = nil,
         isTruncated: Bool = false
     ) {
         self.source = source
         self.text = text
+        self.rawTranscript = rawTranscript
         self.path = path
         self.modifiedAt = modifiedAt
         self.isTruncated = isTruncated
@@ -165,6 +170,7 @@ public actor StackConsoleReader {
         return StackConsoleSnapshot(
             source: .managedCapture,
             text: StackConsoleTranscript.render(raw),
+            rawTranscript: data,
             path: canonical.path,
             modifiedAt: values.contentModificationDate,
             isTruncated: truncated

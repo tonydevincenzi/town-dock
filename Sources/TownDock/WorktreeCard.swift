@@ -97,6 +97,14 @@ struct WorktreeCard: View {
             }
 
             primaryAction
+            if isRunning {
+                Button {
+                    store.requestConsole(worktree)
+                } label: {
+                    Label("Console", systemImage: "terminal")
+                }
+                .buttonStyle(LinearButtonStyle())
+            }
             overflowMenu
 
             Button {

@@ -107,6 +107,8 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleName' 'dist/Town Sheriff.app/Contents/Info.plist')" = "Town Sheriff"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' 'dist/Town Sheriff.app/Contents/Info.plist')" = "TownSheriff"
           test -f "dist/Town Sheriff.app/Contents/Resources/TownSheriff.icns"
+          test -f "dist/Town Sheriff.app/Contents/Resources/SwiftTerm-LICENSE.txt"
+          test -f "dist/Town Sheriff.app/Contents/Resources/SwiftTerm_SwiftTerm.bundle/Shaders.metal"
           test -f dist/updates/appcast.xml
           TOWN_DOCK_RELEASE_VERSION="${GITHUB_REF_NAME#v}"
           TOWN_DOCK_ARCHIVE="dist/updates/Town-Sheriff-$TOWN_DOCK_RELEASE_VERSION.zip"

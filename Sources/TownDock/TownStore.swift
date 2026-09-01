@@ -569,7 +569,8 @@ final class TownStore: ObservableObject {
                 guard consoleWorktree?.id == worktree.id else { return }
                 stackConsole = StackConsoleSnapshot(
                     source: .terminalScrollback,
-                    text: terminalText
+                    text: terminalText,
+                    rawTranscript: Data(terminalText.utf8)
                 )
                 consoleError = nil
                 return

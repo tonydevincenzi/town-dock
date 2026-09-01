@@ -17,6 +17,10 @@ let package = Package(
             url: "https://github.com/sparkle-project/Sparkle",
             exact: "2.9.6"
         ),
+        .package(
+            url: "https://github.com/migueldeicaza/SwiftTerm.git",
+            exact: "1.20.0"
+        ),
     ],
     targets: [
         .target(
@@ -28,6 +32,7 @@ let package = Package(
             dependencies: [
                 "TownDockCore",
                 .product(name: "Sparkle", package: "Sparkle"),
+                .product(name: "SwiftTerm", package: "SwiftTerm"),
             ],
             path: "Sources/TownDock"
         ),

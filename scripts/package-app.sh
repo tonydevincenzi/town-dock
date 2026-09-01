@@ -49,7 +49,9 @@ else
 fi
 cp "$PROJECT_DIR/Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$PROJECT_DIR/Resources/Phosphor-LICENSE.txt" "$RESOURCES_DIR/Phosphor-LICENSE.txt"
+cp "$PROJECT_DIR/Resources/SwiftTerm-LICENSE.txt" "$RESOURCES_DIR/SwiftTerm-LICENSE.txt"
 ditto "$BIN_DIR/Sparkle.framework" "$FRAMEWORKS_DIR/Sparkle.framework"
+ditto "$BIN_DIR/SwiftTerm_SwiftTerm.bundle" "$RESOURCES_DIR/SwiftTerm_SwiftTerm.bundle"
 swift "$PROJECT_DIR/scripts/generate-app-icon.swift" "$RESOURCES_DIR/TownSheriff.icns"
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS_DIR/Info.plist"
