@@ -92,14 +92,15 @@ final class ControlsTests: XCTestCase {
         XCTAssertFalse(anchored.contains(unrelated.pid))
     }
 
-    func testStartUsesPTYCaptureAndPinnedMiseInstance() async throws {
+    func testStartUsesPTYCaptureAndPinnedMiseInstanceWithoutSetupMarker() async throws {
         let directory = try makeWorktreeDirectory()
         defer { try? FileManager.default.removeItem(at: directory) }
         let recorder = ControlInvocationRecorder()
         let consoleRoot = directory.appendingPathComponent("captures")
         let worktree = makeWorktree(
             path: directory.path,
-            instance: makeInstance(number: 3, processes: [], services: [])
+            instance: makeInstance(number: 3, processes: [], services: []),
+            setupComplete: false
         )
         let engine = TownControlEngine(
             runCommand: { tool, _, _, _ in
@@ -427,7 +428,8 @@ final class ControlsTests: XCTestCase {
 
     private func makeWorktree(
         path: String,
-        instance: InstanceSnapshot?
+        instance: InstanceSnapshot?,
+        setupComplete: Bool = true
     ) -> WorktreeSnapshot {
         WorktreeSnapshot(
             path: path,
@@ -440,7 +442,7 @@ final class ControlsTests: XCTestCase {
             gitStatus: GitStatusSnapshot(),
             instance: instance,
             health: nil,
-            setupComplete: true
+            setupComplete: setupComplete
         )
     }
 }

@@ -109,10 +109,7 @@ struct StackConsoleSheet: View {
                     }
                 }
                 .buttonStyle(LinearButtonStyle(emphasized: true))
-                .disabled(
-                    store.isOperating(on: worktree.id)
-                        || (worktree.instance?.isRunning != true && !worktree.setupComplete)
-                )
+                .disabled(store.isOperating(on: worktree.id))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(Color(red: 0.035, green: 0.039, blue: 0.045))

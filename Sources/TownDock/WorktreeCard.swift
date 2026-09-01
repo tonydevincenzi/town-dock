@@ -133,7 +133,7 @@ struct WorktreeCard: View {
             }
         } else {
             Label(
-                worktree.setupComplete ? "No services running" : "Setup incomplete",
+                worktree.setupComplete ? "No services running" : "Setup marker missing",
                 systemImage: worktree.setupComplete ? "pause.circle" : "exclamationmark.circle"
             )
             .font(.caption)
@@ -141,7 +141,7 @@ struct WorktreeCard: View {
             .townTooltip(
                 worktree.setupComplete
                     ? "No Town service is currently listening for this worktree."
-                    : "Run the worktree setup script before starting its services."
+                    : "The setup completion marker is missing. Start will still attempt the validated ./mise launcher and report any failure."
             )
         }
     }
@@ -170,7 +170,12 @@ struct WorktreeCard: View {
                 Label("Start", systemImage: "play.fill")
             }
             .buttonStyle(LinearButtonStyle(emphasized: true))
-            .disabled(isOperating || !worktree.setupComplete)
+            .disabled(isOperating)
+            .townTooltip(
+                worktree.setupComplete
+                    ? "Start Town's local stack and capture its unified console output."
+                    : "The setup marker is missing, but Town Sheriff can still attempt the validated ./mise launcher."
+            )
         }
     }
 

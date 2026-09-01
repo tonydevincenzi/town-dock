@@ -208,7 +208,6 @@ private struct MenuBarWorktreeRow: View {
                     Button("Kill All", role: .destructive) { store.forceKill(worktree) }
                 } else {
                     Button("Start") { store.start(worktree) }
-                        .disabled(!worktree.setupComplete)
                 }
             } label: {
                 Image(systemName: "ellipsis")
