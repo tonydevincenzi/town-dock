@@ -194,7 +194,7 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
         let listeners = scanListeners(warnings: &warnings)
         let psRecords = scanProcesses(warnings: &warnings)
         let processByPID = Dictionary(uniqueKeysWithValues: psRecords.map { ($0.pid, $0) })
-        let candidatePIDs = candidateProcessIDs(
+        let candidatePIDs = Self.candidateProcessIDs(
             processes: psRecords,
             listeners: listeners,
             worktreePaths: scans.map(\.record.path)
@@ -408,20 +408,22 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 timeout: 4,
                 maxOutputBytes: 8 * 1_024 * 1_024
             )
-            return PSMetadataParser.parse(result.stdout)
+            // Raw commands remain private to discovery and are redacted when
+            // the bounded ProcessIdentity set is created.
+            return PSMetadataParser.parse(result.stdout, redactSensitiveValues: false)
         } catch {
             warnings.append("Process metadata is unavailable.")
             return []
         }
     }
 
-    private func candidateProcessIDs(
+    static func candidateProcessIDs(
         processes: [PSProcessRecord],
         listeners: [ListenerRecord],
         worktreePaths: [String]
     ) -> [Int32] {
         let byPID = Dictionary(uniqueKeysWithValues: processes.map { ($0.pid, $0) })
-        var selected = Set(listeners.map(\.pid))
+        var directMatches = Set(listeners.map(\.pid))
         let townTerms = [
             "local-convex", "local-stack", "stack-health", "--instance-name instance-",
             "harness-electric", "convex-local-backend", "scripts/dev", "next-server",
@@ -431,9 +433,11 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
             let lower = process.command.lowercased()
             if townTerms.contains(where: { lower.contains($0) }) ||
                 worktreePaths.contains(where: { process.command.contains($0) }) {
-                selected.insert(process.pid)
+                directMatches.insert(process.pid)
             }
         }
+
+        var selected = directMatches
 
         // Include bounded ancestry and descendants. This picks up launch wrappers
         // while protecting the scanner from malformed/cyclic process metadata.
@@ -452,7 +456,12 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
             }
         }
         let children = Dictionary(grouping: processes, by: \.parentPID)
-        var queue = Array(selected)
+        // Walk down only from processes that directly matched Town evidence.
+        // Ancestors are retained as launch-wrapper evidence, but expanding
+        // back down from Terminal, Codex, or another shared ancestor pulls in
+        // every sibling process on the machine and routinely hits the 512 PID
+        // safety cap on developer workstations.
+        var queue = Array(directMatches)
         while let pid = queue.popLast(), selected.count < 512 {
             for child in children[pid, default: []] where selected.insert(child.pid).inserted {
                 queue.append(child.pid)
@@ -485,7 +494,10 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
             ) else {
                 continue
             }
-            result.append(contentsOf: LSOFProcessFileParser.parse(output.stdout))
+            result.append(contentsOf: LSOFProcessFileParser.parse(
+                output.stdout,
+                redactSensitiveValues: false
+            ))
         }
         return Array(mergeFileEvidence(lightweight: result, cachedFull: []).values)
     }
@@ -516,7 +528,10 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                     ) else {
                         continue
                     }
-                    files.append(contentsOf: LSOFProcessFileParser.parse(output.stdout))
+                    files.append(contentsOf: LSOFProcessFileParser.parse(
+                        output.stdout,
+                        redactSensitiveValues: false
+                    ))
                 }
                 let merged = Self.mergeFileEvidenceStatic(files)
                 var keyed: [String: ProcessFileEvidence] = [:]
@@ -569,9 +584,13 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
                 parentPID: record.parentPID,
                 processGroupID: record.processGroupID,
                 startToken: record.startToken,
-                command: record.command,
-                executablePath: evidence[record.pid]?.executablePath,
-                workingDirectory: evidence[record.pid]?.workingDirectory,
+                command: SecretRedactor.redact(record.command, maximumLength: 2_048),
+                executablePath: evidence[record.pid]?.executablePath.map {
+                    SecretRedactor.redact($0, maximumLength: 4_096)
+                },
+                workingDirectory: evidence[record.pid]?.workingDirectory.map {
+                    SecretRedactor.redact($0, maximumLength: 4_096)
+                },
                 residentBytes: record.residentBytes,
                 cpuPercent: record.cpuPercent
             )
@@ -922,7 +941,7 @@ public final class TownDiscoveryEngine: @unchecked Sendable {
     }
 
     private func scanDockerInventory(warnings: inout [String]) -> DockerInventory {
-        let (cached, shouldRefresh) = cache.dockerSnapshot(now: Date(), interval: 6)
+        let (cached, shouldRefresh) = cache.dockerSnapshot(now: Date(), interval: 60)
         if let cached {
             if shouldRefresh {
                 let runner = self.runner

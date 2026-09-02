@@ -15,6 +15,7 @@ struct BulkNukeReview: Identifiable, Hashable {
 @MainActor
 final class TownStore: ObservableObject {
     static let shared = TownStore()
+    private static let automaticRefreshInterval: Duration = .seconds(30)
 
     @Published private(set) var snapshot: TownSnapshot
     @Published private(set) var isRefreshing = false
@@ -135,7 +136,13 @@ final class TownStore: ObservableObject {
         pollingTask = Task { [weak self] in
             await self?.refresh()
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
+                // A full refresh intentionally verifies Git state, listening
+                // ports, process ownership, and local storage. Running that
+                // system-wide discovery every three seconds kept a CPU core
+                // busy on process-heavy developer machines. Thirty seconds
+                // keeps the dashboard current; the refresh control remains
+                // available for immediate updates.
+                try? await Task.sleep(for: Self.automaticRefreshInterval)
                 guard !Task.isCancelled else { break }
                 await self?.refresh(silent: true)
             }

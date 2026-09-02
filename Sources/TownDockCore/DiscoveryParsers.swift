@@ -12,10 +12,19 @@ public enum SecretRedactor {
         (#"\b[A-Za-z0-9._-]+\|[A-Fa-f0-9]{32,}\b"#, "[REDACTED ADMIN KEY]"),
     ]
 
+    // Discovery redacts every process command and attributed file path. A
+    // snapshot can contain thousands of values, so compiling all eight ICU
+    // patterns for every value made the three-second refresh loop consume a
+    // substantial fraction of a CPU core. NSRegularExpression is immutable
+    // after construction and safe to reuse for concurrent matching.
+    private static let compiledReplacements: [(NSRegularExpression, String)] = replacements.compactMap {
+        guard let expression = try? NSRegularExpression(pattern: $0.0) else { return nil }
+        return (expression, $0.1)
+    }
+
     public static func redact(_ value: String, maximumLength: Int = 2_048) -> String {
         var result = value.replacingOccurrences(of: "\0", with: "")
-        for (pattern, replacement) in replacements {
-            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+        for (expression, replacement) in compiledReplacements {
             let range = NSRange(result.startIndex..<result.endIndex, in: result)
             result = expression.stringByReplacingMatches(
                 in: result,
@@ -276,7 +285,10 @@ public struct PSProcessRecord: Hashable, Sendable {
 }
 
 public enum PSMetadataParser {
-    public static func parse(_ text: String) -> [PSProcessRecord] {
+    public static func parse(
+        _ text: String,
+        redactSensitiveValues: Bool = true
+    ) -> [PSProcessRecord] {
         guard let expression = try? NSRegularExpression(
             pattern: #"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+([0-9]+(?:\.[0-9]+)?)\s+(\d+)\s*(.*)$"#
         ) else {
@@ -306,7 +318,9 @@ public enum PSMetadataParser {
                 residentBytes: rssKB.multipliedReportingOverflow(by: 1_024).overflow
                     ? UInt64.max
                     : rssKB * 1_024,
-                command: SecretRedactor.redact(command, maximumLength: 2_048)
+                command: redactSensitiveValues
+                    ? SecretRedactor.redact(command, maximumLength: 2_048)
+                    : command
             )
         }
     }
@@ -333,7 +347,10 @@ public struct ProcessFileEvidence: Hashable, Sendable {
 }
 
 public enum LSOFProcessFileParser {
-    public static func parse(_ text: String) -> [ProcessFileEvidence] {
+    public static func parse(
+        _ text: String,
+        redactSensitiveValues: Bool = true
+    ) -> [ProcessFileEvidence] {
         struct Builder {
             var cwd: String?
             var executable: String?
@@ -354,7 +371,9 @@ public enum LSOFProcessFileParser {
                 guard let currentPID else { continue }
                 let rawPath = String(line.dropFirst())
                 guard rawPath.hasPrefix("/") else { continue }
-                let path = SecretRedactor.redact(rawPath, maximumLength: 4_096)
+                let path = redactSensitiveValues
+                    ? SecretRedactor.redact(rawPath, maximumLength: 4_096)
+                    : rawPath
                 var builder = builders[currentPID, default: Builder()]
                 switch currentDescriptor {
                 case "cwd":
